@@ -22,7 +22,9 @@ import {
   Tools,
   useAui,
   useAuiToolOverrides,
+  useRemoteThreadListRuntime,
 } from "@assistant-ui/react";
+import { serverThreadListAdapter } from "@/lib/server-thread-list-adapter";
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 import toolkit from "./toolkit";
@@ -139,10 +141,14 @@ export const Assistant = () => {
     [],
   );
 
-  const runtime = useChatRuntime({
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-    transport,
-    adapters: { attachments: attachmentAdapter },
+  const runtime = useRemoteThreadListRuntime({
+    adapter: serverThreadListAdapter,
+    runtimeHook: () =>
+      useChatRuntime({
+        sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+        transport,
+        adapters: { attachments: attachmentAdapter },
+      }),
   });
 
   const aui = useAui({

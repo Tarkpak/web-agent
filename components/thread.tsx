@@ -93,6 +93,19 @@ const IMAGE_TOOL_NAMES: Record<string, true> = {
   edit_image: true,
 };
 
+const FileOrImage: FileMessagePartComponent = (props) => {
+  if (!props.mimeType.toLowerCase().startsWith("image/") || props.sourceType === "id") {
+    return <File {...props} />;
+  }
+
+  const image = /^(data:|https?:\/\/|blob:)/i.test(props.data)
+    ? props.data
+    : `data:${props.mimeType};base64,${props.data}`;
+  const { data: _data, mimeType: _mimeType, sourceType: _sourceType, ...imageProps } = props;
+
+  return <Image {...imageProps} type="image" image={image} />;
+};
+
 const toolGroupBy = groupPartByType({
   reasoning: ["group-chainOfThought", "group-reasoning"],
   "tool-call": ["group-chainOfThought", "group-tool"],
@@ -456,7 +469,7 @@ const AssistantMessage: FC = () => {
               case "file":
                 return (
                   <div data-slot="aui_assistant-message-file" className="py-1">
-                    <File {...part} />
+                    <FileOrImage {...part} />
                   </div>
                 );
               case "image":

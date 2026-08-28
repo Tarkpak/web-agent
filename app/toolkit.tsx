@@ -1,5 +1,6 @@
 "use generative";
 
+import { Image } from "@/components/image";
 import { defineToolkit, externalTool, humanTool, stubTool } from "@assistant-ui/react";
 import { z } from "zod";
 
@@ -25,6 +26,38 @@ function ToolCard({
       </p>
       <p className="mt-1 whitespace-pre-wrap">{body}</p>
     </div>
+  );
+}
+
+function GeneratedImage({
+  alt,
+  dataUrl,
+  generating = false,
+}: {
+  alt: string;
+  dataUrl?: string;
+  generating?: boolean;
+}) {
+  if (generating) {
+    return (
+      <Image.Root className="my-2" size="lg">
+        <Image.Generating />
+      </Image.Root>
+    );
+  }
+
+  if (!dataUrl) {
+    return <Image.ContentFilterError reason="No image was returned by the provider." />;
+  }
+
+  const part = { type: "image" as const, image: dataUrl };
+  return (
+    <Image.Root className="my-2" size="lg">
+      <Image.Zoom src={dataUrl} alt={alt}>
+        <Image.Preview src={dataUrl} alt={alt} />
+      </Image.Zoom>
+      <Image.Actions part={part} />
+    </Image.Root>
   );
 }
 
@@ -146,22 +179,16 @@ export default defineToolkit({
     execute: externalTool(),
     render: ({ args, result, status }) => {
       if (status.type === "running") {
-        return <ToolCard title="Image" body={`Generating ${args.prompt ?? "image"}`} tone="wait" />;
+        return <GeneratedImage alt={args.prompt ?? "Generated image"} generating />;
       }
       const dataUrl =
         result && typeof result === "object" && "dataUrl" in result
           ? String((result as { dataUrl?: string }).dataUrl || "")
           : "";
       if (!dataUrl) {
-        return <ToolCard title="Image" body="No image returned" />;
+        return <GeneratedImage alt={args.prompt ?? "Generated image"} />;
       }
-      return (
-        <img
-          src={dataUrl}
-          alt={args.prompt || "Generated image"}
-          className="border-border/60 mt-2 max-h-[28rem] max-w-full rounded-xl border"
-        />
-      );
+      return <GeneratedImage alt={args.prompt || "Generated image"} dataUrl={dataUrl} />;
     },
   },
   edit_image: {
@@ -172,28 +199,16 @@ export default defineToolkit({
     execute: externalTool(),
     render: ({ args, result, status }) => {
       if (status.type === "running") {
-        return (
-          <ToolCard
-            title="Image edit"
-            body={`Editing with ${args.prompt ?? "prompt"}`}
-            tone="wait"
-          />
-        );
+        return <GeneratedImage alt={args.prompt ?? "Edited image"} generating />;
       }
       const dataUrl =
         result && typeof result === "object" && "dataUrl" in result
           ? String((result as { dataUrl?: string }).dataUrl || "")
           : "";
       if (!dataUrl) {
-        return <ToolCard title="Image edit" body="No image returned" />;
+        return <GeneratedImage alt={args.prompt ?? "Edited image"} />;
       }
-      return (
-        <img
-          src={dataUrl}
-          alt={args.prompt || "Edited image"}
-          className="border-border/60 mt-2 max-h-[28rem] max-w-full rounded-xl border"
-        />
-      );
+      return <GeneratedImage alt={args.prompt || "Edited image"} dataUrl={dataUrl} />;
     },
   },
   confirm_plan: {

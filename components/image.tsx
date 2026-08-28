@@ -435,6 +435,7 @@ const ImageImpl: ImageMessagePartComponent = (props) => {
         <ImagePreview src={image} alt={filename || "Image content"} />
       </ImageZoom>
       <ImageFilename>{filename}</ImageFilename>
+      <ImageActions part={props} />
     </ImageRoot>
   );
 };
