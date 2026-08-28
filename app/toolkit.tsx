@@ -1,6 +1,7 @@
 "use generative";
 
 import { Image } from "@/components/image";
+import { Button } from "@/components/ui/button";
 import { defineToolkit, externalTool, humanTool, stubTool } from "@assistant-ui/react";
 import { z } from "zod";
 
@@ -243,20 +244,17 @@ export default defineToolkit({
             ))}
           </ol>
           <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              className="bg-primary text-primary-foreground rounded-lg px-3 py-1.5 text-xs font-medium"
-              onClick={() => addResult({ approved: true })}
-            >
+            <Button type="button" size="sm" onClick={() => addResult({ approved: true })}>
               Approve
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="border-border rounded-lg border px-3 py-1.5 text-xs font-medium"
+              variant="outline"
+              size="sm"
               onClick={() => addResult({ approved: false })}
             >
               Reject
-            </button>
+            </Button>
           </div>
         </div>
       );

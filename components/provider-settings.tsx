@@ -12,8 +12,20 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SettingsIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
+
+const PROVIDERS = [
+  { label: "OpenAI compatible", value: "openai" },
+  { label: "xAI (Grok tools)", value: "xai" },
+];
 
 export function ProviderSettingsButton({
   settings,
@@ -24,6 +36,7 @@ export function ProviderSettingsButton({
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(settings);
+  const supplierLabelId = useId();
 
   useEffect(() => {
     if (open) setDraft(settings);
@@ -55,12 +68,13 @@ export function ProviderSettingsButton({
             setOpen(false);
           }}
         >
-          <label className="grid gap-1 text-xs">
-            Supplier
-            <select
+          <div className="grid gap-1 text-xs">
+            <span id={supplierLabelId}>Supplier</span>
+            <Select
+              items={PROVIDERS}
               value={draft.provider}
-              onChange={(event) => {
-                const provider = event.target.value === "xai" ? "xai" : "openai";
+              onValueChange={(value) => {
+                const provider = value === "xai" ? "xai" : "openai";
                 setDraft({
                   ...draft,
                   provider,
@@ -68,12 +82,19 @@ export function ProviderSettingsButton({
                   baseURL: draft.baseURL,
                 });
               }}
-              className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm"
             >
-              <option value="openai">OpenAI compatible</option>
-              <option value="xai">xAI (Grok tools)</option>
-            </select>
-          </label>
+              <SelectTrigger className="w-full" aria-labelledby={supplierLabelId}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="start" alignItemWithTrigger={false}>
+                {PROVIDERS.map((provider) => (
+                  <SelectItem key={provider.value} value={provider.value}>
+                    {provider.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           {draft.provider === "openai" ? (
             <label className="grid gap-1 text-xs">
               Base URL
