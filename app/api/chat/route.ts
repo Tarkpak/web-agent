@@ -18,12 +18,7 @@ import {
   generateOpenAIImage,
   lastUserText,
 } from "@/lib/images";
-import {
-  classifyModel,
-  isHttpUrl,
-  resolveOpenAIAuth,
-  sanitizeModelId,
-} from "@/lib/provider";
+import { classifyModel, isHttpUrl, resolveOpenAIAuth, sanitizeModelId } from "@/lib/provider";
 import toolkit from "../../toolkit";
 
 export const maxDuration = 300;
@@ -51,10 +46,13 @@ Cite sources when you searched.`;
   return shared;
 }
 
-function imageMessageResponse(image: {
-  dataUrl: string;
-  mediaType: string;
-}, caption: string) {
+function imageMessageResponse(
+  image: {
+    dataUrl: string;
+    mediaType: string;
+  },
+  caption: string,
+) {
   const stream = createUIMessageStream({
     execute: ({ writer }) => {
       writer.write({
@@ -93,8 +91,7 @@ export async function POST(req: Request) {
 
   const provider = requestedProvider === "xai" ? "xai" : "openai";
   const modelId = sanitizeModelId(requestedModel);
-  const imageModelId =
-    sanitizeModelId(requestedImageModel) || "gpt-image-2";
+  const imageModelId = sanitizeModelId(requestedImageModel) || "gpt-image-2";
   const auth = resolveOpenAIAuth({
     provider,
     apiKey: requestedApiKey,
@@ -102,10 +99,7 @@ export async function POST(req: Request) {
   });
 
   if (!auth.apiKey) {
-    return Response.json(
-      { error: "Missing API key. Set it in Settings or .env.local." },
-      { status: 500 },
-    );
+    return Response.json({ error: "Missing API key. Set it in Settings." }, { status: 500 });
   }
   if (auth.baseURL && !isHttpUrl(auth.baseURL)) {
     return Response.json({ error: "Base URL must be http or https." }, { status: 400 });
@@ -131,10 +125,7 @@ export async function POST(req: Request) {
             model: modelId || imageModelId,
             prompt,
           });
-      return imageMessageResponse(
-        image,
-        refs.length ? "Edited image." : "Generated image.",
-      );
+      return imageMessageResponse(image, refs.length ? "Edited image." : "Generated image.");
     } catch (error) {
       return Response.json(
         { error: error instanceof Error ? error.message : String(error) },
@@ -205,8 +196,7 @@ export async function POST(req: Request) {
     return result.toUIMessageStreamResponse({
       sendReasoning: true,
       sendSources: true,
-      onError: (error) =>
-        error instanceof Error ? error.message : String(error),
+      onError: (error) => (error instanceof Error ? error.message : String(error)),
     });
   }
 
@@ -229,7 +219,6 @@ export async function POST(req: Request) {
   return result.toUIMessageStreamResponse({
     sendReasoning: true,
     sendSources: true,
-    onError: (error) =>
-      error instanceof Error ? error.message : String(error),
+    onError: (error) => (error instanceof Error ? error.message : String(error)),
   });
 }

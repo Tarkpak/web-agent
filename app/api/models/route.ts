@@ -22,10 +22,7 @@ export async function POST(req: Request) {
   });
 
   if (!auth.apiKey) {
-    return NextResponse.json(
-      { error: "Missing API key.", models: [] },
-      { status: 401 },
-    );
+    return NextResponse.json({ error: "Missing API key.", models: [] }, { status: 401 });
   }
   if (!isHttpUrl(auth.baseURL)) {
     return NextResponse.json(
@@ -40,16 +37,11 @@ export async function POST(req: Request) {
     });
     const json = await res.json();
     if (!res.ok) {
-      const message =
-        json?.error?.message || `Failed to list models (${res.status})`;
+      const message = json?.error?.message || `Failed to list models (${res.status})`;
       return NextResponse.json({ error: message, models: [] }, { status: 502 });
     }
 
-    const raw = Array.isArray(json?.data)
-      ? json.data
-      : Array.isArray(json)
-        ? json
-        : [];
+    const raw = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
     const models: CatalogModel[] = raw
       .map((item: { id?: string; owned_by?: string }) => {
         const label = typeof item.id === "string" ? item.id : "";
@@ -62,25 +54,23 @@ export async function POST(req: Request) {
           kind: classifyModel(label),
         } satisfies CatalogModel;
       })
-      .filter((item): item is CatalogModel => item != null && item.kind !== "hidden")
-      .sort((a, b) => {
+      .filter(
+        (item: CatalogModel | null): item is CatalogModel => item != null && item.kind !== "hidden",
+      )
+      .sort((a: CatalogModel, b: CatalogModel) => {
         if (a.kind !== b.kind) return a.kind === "chat" ? -1 : 1;
         return a.id.localeCompare(b.id);
       });
 
     return NextResponse.json({ models });
   } catch (error) {
-    const cause =
-      error instanceof Error && "cause" in error ? error.cause : undefined;
+    const cause = error instanceof Error && "cause" in error ? error.cause : undefined;
     const detail =
       cause instanceof Error
         ? cause.message
         : error instanceof Error
           ? error.message
           : "Failed to list models.";
-    return NextResponse.json(
-      { error: detail, models: [] },
-      { status: 502 },
-    );
+    return NextResponse.json({ error: detail, models: [] }, { status: 502 });
   }
 }

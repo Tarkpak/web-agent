@@ -67,9 +67,7 @@ export function ComposerModelSelect() {
               <RefreshCwIcon className={cn("size-3.5", shell.loading && "animate-spin")} />
             </Button>
           </div>
-          {shell.error ? (
-            <p className="text-destructive px-1 py-2 text-xs">{shell.error}</p>
-          ) : null}
+          {shell.error ? <p className="text-destructive px-1 py-2 text-xs">{shell.error}</p> : null}
           <div className="max-h-64 overflow-auto">
             <ModelGroup
               title="Chat / vision"
@@ -136,9 +134,7 @@ function ModelGroup({
           {icon ? <ImageIcon className="size-3 shrink-0" /> : null}
           <span className="min-w-0 flex-1 truncate">{model.label}</span>
           {model.ownedBy ? (
-            <span className="text-muted-foreground shrink-0 text-[10px]">
-              {model.ownedBy}
-            </span>
+            <span className="text-muted-foreground shrink-0 text-[10px]">{model.ownedBy}</span>
           ) : null}
         </button>
       ))}

@@ -6,11 +6,7 @@ import { ShellProvider } from "@/components/shell-context";
 import { Thread } from "@/components/thread";
 import { ThreadListSidebar } from "@/components/threadlist-sidebar";
 import { Separator } from "@/components/ui/separator";
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { useProviderSettings } from "@/hooks/use-provider-settings";
 import { useRemoteModels } from "@/hooks/use-remote-models";
 import type { Artifact } from "@/lib/artifacts";
@@ -76,11 +72,7 @@ function AgentWelcome() {
   );
 }
 
-function ArtifactBridge({
-  onPresent,
-}: {
-  onPresent: (artifact: Artifact) => void;
-}) {
+function ArtifactBridge({ onPresent }: { onPresent: (artifact: Artifact) => void }) {
   useAuiToolOverrides({
     present_artifact: {
       execute: async (args) => {
@@ -93,7 +85,7 @@ function ArtifactBridge({
 }
 
 export const Assistant = () => {
-  const { settings, save, hints } = useProviderSettings();
+  const { settings, save } = useProviderSettings();
   const { models, loading, error, refresh } = useRemoteModels(settings);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
 
@@ -102,7 +94,14 @@ export const Assistant = () => {
     if (settings.model && models.some((model) => model.id === settings.model)) {
       return;
     }
-    const byLabel = models.find((model) => model.label === settings.model);
+    // Settings saved before the vendor-prefix fix may hold "owner/Model"
+    // while the catalog now lists the bare id. Match on the stripped suffix.
+    const bare = settings.model.includes("/")
+      ? settings.model.slice(settings.model.lastIndexOf("/") + 1)
+      : "";
+    const byLabel =
+      models.find((model) => model.label === settings.model) ??
+      (bare ? models.find((model) => model.label === bare) : undefined);
     if (byLabel) {
       save({ ...settings, model: byLabel.id });
       return;
@@ -111,8 +110,15 @@ export const Assistant = () => {
     if (next) save({ ...settings, model: next.id });
   }, [models, save, settings.model, settings.provider, settings.baseURL, settings.apiKey]);
 
+  // Gateway catalogs often list display-name ids ("GPT Image 1") that the
+  // Images API rejects (400). Prefer known-good lowercase ids, then any
+  // id without whitespace, before falling back to the default.
   const imageModel =
-    models.find((model) => model.kind === "image")?.id || "gpt-image-2";
+    ["gpt-image-2", "gpt-image-1.5", "grok-imagine-image-2.0", "grok-imagine-image"].find((id) =>
+      models.some((model) => model.kind === "image" && model.id === id),
+    ) ||
+    models.find((model) => model.kind === "image" && !/\s/.test(model.id))?.id ||
+    "gpt-image-2";
   const settingsRef = useRef(settings);
   const imageModelRef = useRef(imageModel);
   settingsRef.current = settings;
@@ -156,45 +162,36 @@ export const Assistant = () => {
           refresh,
         }}
       >
-      <ArtifactBridge onPresent={setArtifact} />
-      <SidebarProvider>
-        <div className="flex h-dvh w-full">
-          <ThreadListSidebar />
-          <SidebarInset>
-            <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-              <SidebarTrigger />
-              <Separator orientation="vertical" className="mr-2 h-4" />
-              <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">Agent Shell</p>
-                  <p className="text-muted-foreground truncate text-xs">
-                    {settings.provider === "xai"
-                      ? "xAI Grok"
-                      : "OpenAI compatible"}
-                    {error ? " · models unavailable" : ""}
-                  </p>
+        <ArtifactBridge onPresent={setArtifact} />
+        <SidebarProvider>
+          <div className="flex h-dvh w-full">
+            <ThreadListSidebar />
+            <SidebarInset>
+              <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+                <SidebarTrigger />
+                <Separator orientation="vertical" className="mr-2 h-4" />
+                <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">Agent Shell</p>
+                    <p className="text-muted-foreground truncate text-xs">
+                      {settings.provider === "xai" ? "xAI Grok" : "OpenAI compatible"}
+                      {error ? " · models unavailable" : ""}
+                    </p>
+                  </div>
+                  <ProviderSettingsButton settings={settings} onSave={save} />
                 </div>
-                <ProviderSettingsButton
-                  settings={settings}
-                  hints={hints}
-                  onSave={save}
-                />
+              </header>
+              <div className="flex min-h-0 flex-1">
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <Thread components={{ Welcome: AgentWelcome }} />
+                </div>
+                {artifact ? (
+                  <ArtifactCanvas artifact={artifact} onClose={() => setArtifact(null)} />
+                ) : null}
               </div>
-            </header>
-            <div className="flex min-h-0 flex-1">
-              <div className="min-w-0 flex-1 overflow-hidden">
-                <Thread components={{ Welcome: AgentWelcome }} />
-              </div>
-              {artifact ? (
-                <ArtifactCanvas
-                  artifact={artifact}
-                  onClose={() => setArtifact(null)}
-                />
-              ) : null}
-            </div>
-          </SidebarInset>
-        </div>
-      </SidebarProvider>
+            </SidebarInset>
+          </div>
+        </SidebarProvider>
       </ShellProvider>
     </AssistantRuntimeProvider>
   );

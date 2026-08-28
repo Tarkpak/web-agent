@@ -12,9 +12,7 @@ import {
 } from "@/components/ui/sidebar";
 import { ThreadList } from "@/components/thread-list";
 
-export function ThreadListSidebar({
-  ...props
-}: React.ComponentProps<typeof Sidebar>) {
+export function ThreadListSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar {...props}>
       <SidebarHeader className="aui-sidebar-header mb-2 border-b">
@@ -26,12 +24,8 @@ export function ThreadListSidebar({
                   <BotIcon className="aui-sidebar-header-icon size-4" />
                 </div>
                 <div className="aui-sidebar-header-heading me-6 flex flex-col gap-0.5 leading-none">
-                  <span className="aui-sidebar-header-title font-semibold">
-                    Agent Shell
-                  </span>
-                  <span className="text-muted-foreground text-xs font-normal">
-                    Local workspace
-                  </span>
+                  <span className="aui-sidebar-header-title font-semibold">Agent Shell</span>
+                  <span className="text-muted-foreground text-xs font-normal">Local workspace</span>
                 </div>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -50,9 +44,7 @@ export function ThreadListSidebar({
                 <BotIcon className="aui-sidebar-footer-icon size-4" />
               </div>
               <div className="aui-sidebar-footer-heading flex flex-col gap-0.5 leading-none">
-                <span className="aui-sidebar-footer-title font-semibold">
-                  Provider
-                </span>
+                <span className="aui-sidebar-footer-title font-semibold">Provider</span>
                 <span>OpenAI or xAI</span>
               </div>
             </SidebarMenuButton>

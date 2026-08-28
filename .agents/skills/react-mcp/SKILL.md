@@ -204,23 +204,29 @@ const connectionState = useAuiState((s) => s.mcpServer.connectionState);
 ## Common Gotchas
 
 **Tools not appearing in chat**
+
 - The server must reach the `connected` state; check `McpServerPrimitive.Status` or `s.mcpServer.connectionState`.
 - Tool names are prefixed `serverId__toolName`; reference that exact name in tool UI.
 
 **OAuth never completes**
+
 - The callback route path must match `oauthRedirectUri` (default `/mcp/callback`).
 - `McpOAuthCallback` must be rendered inside the same provider as the manager.
 
 **Servers not persisting / SSR errors**
+
 - Default `McpLocalStorage()` needs the browser; use `McpMemoryStorage()` or `McpCustomStorage(...)` on the server.
 
 **Custom server cannot be removed**
+
 - `RemoveButton` hides on connector presets by design; only user-added servers are removable.
 
 **Elicitation prompt never renders**
+
 - `McpElicitationPrimitive.Root` renders nothing when there is no active request; mount it inside the same provider as the manager and check `useMcpElicitation()`.
 
 **Transport**
+
 - Only StreamableHTTP is supported. `listResources()` supports pagination; prompts, sampling, and auto-reconnect are not yet wired.
 
 ## Related Skills

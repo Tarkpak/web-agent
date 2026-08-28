@@ -15,16 +15,17 @@ What is already wired:
 
 ## Run
 
-1. Copy `.env.example` to `.env.local`.
-2. Set `OPENAI_API_KEY` (and optional `OPENAI_BASE_URL` / `OPENAI_MODEL`), or open Settings in the app and paste them there.
-3. Install and start:
+1. Install and start:
 
 ```bash
 bun install
 bun dev
 ```
 
-Open http://localhost:3000.
+2. Open http://localhost:3000, click the gear in the header, and enter your
+   provider settings (supplier, base URL, API key). Models are loaded from the
+   endpoint's `/v1/models`; keys and settings stay in this browser's
+   `localStorage`.
 
 ## Layout
 
@@ -34,7 +35,5 @@ Open http://localhost:3000.
 - `components/thread.tsx` - chat surface
 - `components/threadlist-sidebar.tsx` - conversation list
 - `components/artifact-canvas.tsx` - side canvas
-
-The gear in the header opens provider settings. Keys typed there stay in this browser (`localStorage`). Leave the key blank to use `.env.local`.
 
 The UI source lives in this repo, so you can restyle every pixel without forking the library.

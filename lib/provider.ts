@@ -39,15 +39,13 @@ export type CatalogModel = {
   kind: ModelKind;
 };
 
-export function toWireModelId(id: string, ownedBy?: string) {
-  const name = id.trim();
-  const owner = ownedBy?.trim() ?? "";
-  if (!name) return "";
-  if (name.includes("/")) return name;
-  if (owner && /^[a-z0-9][a-z0-9_-]{0,32}$/i.test(owner)) {
-    return `${owner}/${name}`;
-  }
-  return name;
+export function toWireModelId(id: string, _ownedBy?: string) {
+  // The OpenAI-compatible /v1/models `id` is the exact value to send in
+  // chat requests. `owned_by` is metadata only — never prefix it, or
+  // gateways that expect bare ids fail with "unknown provider for model".
+  // Ids that already carry a vendor prefix (e.g. "openai/gpt-4o") pass
+  // through untouched.
+  return id.trim();
 }
 
 export function classifyModel(id: string): ModelKind {
@@ -74,15 +72,13 @@ export function resolveOpenAIAuth(input: {
   const clientBaseURL = input.baseURL?.trim() ?? "";
   if (input.provider === "xai") {
     return {
-      apiKey: clientKey || process.env.XAI_API_KEY || "",
+      apiKey: clientKey,
       baseURL: rewriteLocalhost("https://api.x.ai/v1"),
     };
   }
   return {
-    apiKey: clientKey || process.env.OPENAI_API_KEY || "",
-    baseURL: rewriteLocalhost(
-      clientBaseURL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
-    ),
+    apiKey: clientKey,
+    baseURL: rewriteLocalhost(clientBaseURL || "https://api.openai.com/v1"),
   };
 }
 

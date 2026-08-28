@@ -4,13 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { Artifact } from "@/lib/artifacts";
 import { XIcon } from "lucide-react";
 
-export function ArtifactCanvas({
-  artifact,
-  onClose,
-}: {
-  artifact: Artifact;
-  onClose: () => void;
-}) {
+export function ArtifactCanvas({ artifact, onClose }: { artifact: Artifact; onClose: () => void }) {
   return (
     <aside className="bg-background flex h-full min-w-0 flex-1 flex-col border-s">
       <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b px-4">

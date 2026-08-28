@@ -193,9 +193,7 @@ const rows = await db
   .select()
   .from(threads)
   .where(
-    orgId
-      ? and(eq(threads.orgId, orgId), eq(threads.userId, userId))
-      : eq(threads.userId, userId),
+    orgId ? and(eq(threads.orgId, orgId), eq(threads.userId, userId)) : eq(threads.userId, userId),
   );
 ```
 
@@ -257,8 +255,7 @@ import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 
 const cloud = new AssistantCloud({
   baseUrl: process.env.NEXT_PUBLIC_ASSISTANT_BASE_URL!,
-  authToken: () =>
-    fetch("/api/assistant-ui-token", { method: "POST" }).then((r) => r.text()),
+  authToken: () => fetch("/api/assistant-ui-token", { method: "POST" }).then((r) => r.text()),
 });
 
 const runtime = useChatRuntime({ cloud });

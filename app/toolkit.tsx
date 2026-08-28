@@ -1,11 +1,6 @@
 "use generative";
 
-import {
-  defineToolkit,
-  externalTool,
-  humanTool,
-  stubTool,
-} from "@assistant-ui/react";
+import { defineToolkit, externalTool, humanTool, stubTool } from "@assistant-ui/react";
 import { z } from "zod";
 
 function ToolCard({
@@ -115,9 +110,7 @@ export default defineToolkit({
       <ToolCard
         title="Time"
         body={
-          status.type === "running"
-            ? "Reading clock"
-            : result?.formatted ?? result?.iso ?? "Done"
+          status.type === "running" ? "Reading clock" : (result?.formatted ?? result?.iso ?? "Done")
         }
         tone={status.type === "running" ? "wait" : "ok"}
       />
@@ -153,13 +146,7 @@ export default defineToolkit({
     execute: externalTool(),
     render: ({ args, result, status }) => {
       if (status.type === "running") {
-        return (
-          <ToolCard
-            title="Image"
-            body={`Generating ${args.prompt ?? "image"}`}
-            tone="wait"
-          />
-        );
+        return <ToolCard title="Image" body={`Generating ${args.prompt ?? "image"}`} tone="wait" />;
       }
       const dataUrl =
         result && typeof result === "object" && "dataUrl" in result
@@ -222,7 +209,9 @@ export default defineToolkit({
         return (
           <ToolCard
             title="Plan"
-            body={result.approved ? "Approved. Continuing." : "Rejected. Waiting for a new direction."}
+            body={
+              result.approved ? "Approved. Continuing." : "Rejected. Waiting for a new direction."
+            }
             tone={result.approved ? "ok" : "idle"}
           />
         );

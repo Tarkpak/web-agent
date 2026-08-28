@@ -23,8 +23,7 @@ function asDataUrl(mediaType: string, b64: string) {
 }
 
 async function readImageResponse(json: unknown): Promise<GeneratedImage> {
-  const data = (json as { data?: Array<{ b64_json?: string; url?: string }> })
-    .data;
+  const data = (json as { data?: Array<{ b64_json?: string; url?: string }> }).data;
   const first = data?.[0];
   if (first?.b64_json) {
     return {
@@ -62,9 +61,7 @@ export function extractUserImages(messages: UIMessage[]) {
             ? record.image
             : undefined;
       if (!url) continue;
-      const parsed = url.startsWith("data:")
-        ? dataUrlToBlob(url)
-        : null;
+      const parsed = url.startsWith("data:") ? dataUrlToBlob(url) : null;
       if (parsed) {
         images.push({
           blob: parsed.blob,
@@ -115,8 +112,7 @@ export async function generateOpenAIImage(input: {
   });
   const json = await res.json();
   if (!res.ok) {
-    const message =
-      json?.error?.message || `Image generation failed (${res.status})`;
+    const message = json?.error?.message || `Image generation failed (${res.status})`;
     throw new Error(message);
   }
   return readImageResponse(json);
