@@ -3,6 +3,7 @@
 import { Image } from "@/components/image";
 import { Button } from "@/components/ui/button";
 import { defineToolkit, externalTool, humanTool, stubTool } from "@assistant-ui/react";
+import { DownloadIcon, FileSlidersIcon } from "lucide-react";
 import { z } from "zod";
 
 function ToolCard({
@@ -171,6 +172,73 @@ export default defineToolkit({
         tone={status.type === "running" ? "wait" : "ok"}
       />
     ),
+  },
+  create_presentation: {
+    description:
+      "Create a real, downloadable PowerPoint (.pptx) file and open a slide preview in the canvas. Use this whenever the user asks for a PPT, PowerPoint, slide deck, or presentation.",
+    parameters: z.object({
+      title: z.string().describe("Presentation title and output file name"),
+      subtitle: z.string().optional().describe("Optional deck subtitle"),
+      theme: z
+        .enum(["tech", "light", "dark"])
+        .optional()
+        .describe("Visual theme; use tech for technology topics"),
+      slides: z
+        .array(
+          z.object({
+            title: z.string().describe("Slide title"),
+            subtitle: z.string().optional().describe("Short supporting line"),
+            body: z.string().optional().describe("Short paragraph, preferably under 60 words"),
+            bullets: z
+              .array(z.string())
+              .optional()
+              .describe("Up to five concise audience-facing bullet points"),
+          }),
+        )
+        .min(1)
+        .max(30)
+        .describe("All slides in order, including the title slide"),
+    }),
+    execute: stubTool(),
+    render: ({ args, result, status }) => {
+      const file = result as
+        | { fileName?: string; downloadUrl?: string; slideCount?: number; error?: string }
+        | undefined;
+
+      if (status.type === "running") {
+        return (
+          <ToolCard
+            title="Presentation"
+            body={`Creating ${args.slides?.length ?? 0} slides for ${args.title}`}
+            tone="wait"
+          />
+        );
+      }
+
+      if (file?.error) {
+        return <ToolCard title="Presentation" body={file.error} />;
+      }
+
+      return (
+        <div className="border-border/60 bg-card my-2 rounded-lg border px-3 py-3 text-sm">
+          <div className="flex min-w-0 items-center gap-2">
+            <FileSlidersIcon className="text-muted-foreground size-4 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{file?.fileName ?? `${args.title}.pptx`}</p>
+              <p className="text-muted-foreground text-xs">
+                {file?.slideCount ?? args.slides?.length ?? 0} slides · PowerPoint
+              </p>
+            </div>
+            {file?.downloadUrl ? (
+              <Button variant="outline" size="sm" render={<a href={file.downloadUrl} download />}>
+                <DownloadIcon />
+                Download
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      );
+    },
   },
   generate_image: {
     parameters: z.object({

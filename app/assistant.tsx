@@ -82,6 +82,27 @@ function ArtifactBridge({ onPresent }: { onPresent: (artifact: Artifact) => void
         return { shown: true };
       },
     },
+    create_presentation: {
+      execute: async (args) => {
+        const response = await fetch("/api/presentations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(args),
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || "Could not create the PowerPoint file.");
+        }
+        onPresent({
+          kind: "presentation",
+          title: args.title,
+          slides: args.slides,
+          fileName: result.fileName,
+          downloadUrl: result.downloadUrl,
+        } as Artifact);
+        return result;
+      },
+    },
   });
   return null;
 }

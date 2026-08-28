@@ -9,9 +9,10 @@ What is already wired:
 - Provider settings on the page: OpenAI-compatible or native xAI
 - Models loaded from `/v1/models` and picked in the composer
 - Vision via image attachments; generate/edit via `gpt-image-2` and the Images API
-- Local tools: current time, plan approval, canvas artifacts
+- Local tools: current time, plan approval, canvas artifacts, PowerPoint generation
 - xAI extras when that supplier is selected: web search, X search, code execution
-- Right-hand canvas for HTML / markdown / code
+- Right-hand canvas for HTML / markdown / code / PowerPoint previews
+- Generated `.pptx` files saved under `generated-files/` with persistent download links
 
 ## Run
 
