@@ -338,7 +338,7 @@ export default defineToolkit({
   },
   create_presentation: {
     description:
-      "Create a real, downloadable PowerPoint (.pptx) file and open a slide preview in the canvas. Use this whenever the user asks for a PPT, PowerPoint, slide deck, or presentation.",
+      "Create a real, downloadable PowerPoint (.pptx), automatically select capacity-safe layouts, split dense pages, score deck-level narrative quality, and open the result in the editor.",
     parameters: z.object({
       title: z.string().describe("Presentation title and output file name"),
       subtitle: z.string().optional().describe("Optional deck subtitle"),
@@ -357,6 +357,18 @@ export default defineToolkit({
         composition: z.enum(["bold", "editorial", "structured", "cinematic"]),
         density: z.enum(["airy", "balanced", "dense"]),
       }).optional().describe("The exact visual direction selected by the user"),
+      brand: z.object({
+        name: z.string().optional(),
+        logoText: z.string().optional(),
+        titleFont: z.string().optional(),
+        bodyFont: z.string().optional(),
+        footer: z.string().optional(),
+        background: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+        foreground: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+        muted: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+        accent: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+        secondary: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+      }).optional().describe("Brand settings explicitly supplied by the user"),
       slides: z
         .array(
           z.object({
@@ -367,7 +379,17 @@ export default defineToolkit({
               .array(z.string())
               .optional()
               .describe("Up to five concise audience-facing bullet points"),
-            layout: z.enum(["cover", "statement", "split", "list", "comparison", "timeline", "quote", "closing"]).optional().describe("AI-selected composition for this slide; vary adjacent slides"),
+            layout: z.enum(["cover", "statement", "split", "list", "comparison", "timeline", "quote", "closing", "chart", "table"]).optional().describe("Optional layout hint; the orchestrator validates semantic fit and capacity"),
+            templateId: z.enum(["cover-accent-rail", "statement-focus", "split-narrative-list", "numbered-list", "two-column-comparison", "milestone-timeline", "editorial-quote", "closing-halo", "data-chart", "data-table"]).optional(),
+            chart: z.object({
+              type: z.enum(["bar", "line", "pie"]),
+              categories: z.array(z.string()).min(1).max(12),
+              series: z.array(z.object({ name: z.string(), values: z.array(z.number()).min(1).max(12) })).min(1).max(6),
+            }).optional().describe("Traceable chart data supplied by the user"),
+            table: z.object({
+              headers: z.array(z.string()).min(1).max(6),
+              rows: z.array(z.array(z.string()).max(6)).max(8),
+            }).optional().describe("Traceable tabular data supplied by the user"),
           }),
         )
         .min(1)

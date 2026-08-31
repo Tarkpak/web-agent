@@ -12,8 +12,10 @@ import {
   CopyIcon,
   DownloadIcon,
   FileIcon,
+  FileUpIcon,
   EyeIcon,
   LoaderCircleIcon,
+  LayoutDashboardIcon,
   PencilIcon,
   PlusIcon,
   SparklesIcon,
@@ -42,6 +44,53 @@ const themeStyles = {
   light: { canvas: "bg-[#f8fafc] text-slate-950", accent: "bg-cyan-600", muted: "text-slate-600" },
 } as const;
 
+function parseCsv(value: string) {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function ChartDataEditor({ slide, update }: {
+  slide: NonNullable<Artifact["slides"]>[number];
+  update: (slide: NonNullable<Artifact["slides"]>[number]) => void;
+}) {
+  if (!slide.chart) return null;
+  return (
+    <div className="mt-4 space-y-3">
+      <div className="inline-flex rounded-lg bg-muted p-0.5">
+        {(["bar", "line", "pie"] as const).map((type) => (
+          <button key={type} type="button" onClick={() => update({ ...slide, chart: { ...slide.chart!, type, series: type === "pie" ? slide.chart!.series.slice(0, 1) : slide.chart!.series } })} className={`rounded-md px-3 py-1 text-xs transition-colors active:scale-[0.96] ${slide.chart?.type === type ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{type}</button>
+        ))}
+      </div>
+      <Input value={slide.chart.categories.join(", ")} onChange={(event) => update({ ...slide, chart: { ...slide.chart!, categories: parseCsv(event.target.value) } })} placeholder="Categories, comma separated" aria-label="Chart categories" />
+      {slide.chart.series.map((series, index) => (
+        <div key={index} className="grid grid-cols-[8rem_1fr] gap-2">
+          <Input value={series.name} onChange={(event) => { const next = [...slide.chart!.series]; next[index] = { ...series, name: event.target.value }; update({ ...slide, chart: { ...slide.chart!, series: next } }); }} aria-label={`Series ${index + 1} name`} />
+          <Input value={series.values.join(", ")} onChange={(event) => { const next = [...slide.chart!.series]; next[index] = { ...series, values: parseCsv(event.target.value).map(Number).filter(Number.isFinite) }; update({ ...slide, chart: { ...slide.chart!, series: next } }); }} aria-label={`Series ${index + 1} values`} />
+        </div>
+      ))}
+      {slide.chart.type !== "pie" ? <Button size="sm" variant="outline" className="active:scale-[0.96] transition-transform" onClick={() => update({ ...slide, chart: { ...slide.chart!, series: [...slide.chart!.series, { name: `Series ${slide.chart!.series.length + 1}`, values: slide.chart!.categories.map(() => 0) }] } })}><PlusIcon />Add series</Button> : null}
+    </div>
+  );
+}
+
+function TableDataEditor({ slide, update }: {
+  slide: NonNullable<Artifact["slides"]>[number];
+  update: (slide: NonNullable<Artifact["slides"]>[number]) => void;
+}) {
+  if (!slide.table) return null;
+  return (
+    <div className="mt-4 space-y-2">
+      <Input value={slide.table.headers.join(", ")} onChange={(event) => update({ ...slide, table: { ...slide.table!, headers: parseCsv(event.target.value) } })} placeholder="Headers, comma separated" aria-label="Table headers" />
+      {slide.table.rows.map((row, index) => (
+        <div key={index} className="flex gap-2">
+          <Input value={row.join(", ")} onChange={(event) => { const rows = [...slide.table!.rows]; rows[index] = parseCsv(event.target.value); update({ ...slide, table: { ...slide.table!, rows } }); }} aria-label={`Table row ${index + 1}`} />
+          <Button size="icon-sm" variant="ghost" onClick={() => update({ ...slide, table: { ...slide.table!, rows: slide.table!.rows.filter((_, rowIndex) => rowIndex !== index) } })} aria-label={`Delete row ${index + 1}`}><Trash2Icon /></Button>
+        </div>
+      ))}
+      <Button size="sm" variant="outline" className="active:scale-[0.96] transition-transform" onClick={() => update({ ...slide, table: { ...slide.table!, rows: [...slide.table!.rows, slide.table!.headers.map(() => "")] } })}><PlusIcon />Add row</Button>
+    </div>
+  );
+}
+
 function PresentationEditor({ artifact }: { artifact: Artifact }) {
   const { settings } = useProviderSettings();
   const [deck, setDeck] = useState(artifact);
@@ -50,6 +99,8 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
   const [instruction, setInstruction] = useState("Make it clearer and more concise");
   const [rewriting, setRewriting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [orchestrating, setOrchestrating] = useState(false);
+  const [importingTemplate, setImportingTemplate] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [mode, setMode] = useState<"preview" | "edit">(
     artifact.previewUrls?.length ? "preview" : "edit",
@@ -66,6 +117,12 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
               current.generationStatus === "drafting"
                 ? current.previewUrls
                 : (artifact.previewUrls ?? current.previewUrls),
+            slides:
+              current.generationStatus === "drafting"
+                ? current.slides
+                : (artifact.slides ?? current.slides),
+            qualityIssues: artifact.qualityIssues ?? current.qualityIssues,
+            narrativeQuality: artifact.narrativeQuality ?? current.narrativeQuality,
             generationStatus:
               current.generationStatus === "drafting"
                 ? "drafting"
@@ -98,10 +155,17 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
       generationStatus: "drafting",
       downloadUrl: undefined,
       previewUrls: [],
+      qualityIssues: [],
+      narrativeQuality: undefined,
       slides: (current.slides ?? []).map((item, index) =>
         index === activeSlide ? update(item) : item,
       ),
     }));
+  };
+
+  const updateBrand = (field: keyof NonNullable<Artifact["brand"]>, value: string) => {
+    setMode("edit");
+    setDeck((current) => ({ ...current, brand: { ...current.brand, [field]: value }, generationStatus: "drafting", downloadUrl: undefined, previewUrls: [], qualityIssues: [] }));
   };
 
   const updateSelectedText = (text: string) => {
@@ -141,8 +205,9 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
     }
   };
 
-  const exportDeck = async () => {
+  const exportDeck = async (layoutMode: "auto" | "preserve" = "preserve") => {
     setExporting(true);
+    if (layoutMode === "auto") setOrchestrating(true);
     setMessage(null);
     try {
       const response = await fetch("/api/presentations", {
@@ -153,6 +218,9 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
           subtitle: deck.subtitle,
           theme: deck.theme ?? "tech",
           design: deck.design,
+          brand: deck.brand,
+          masterProfile: deck.masterProfile,
+          layoutMode,
           slides,
         }),
       });
@@ -164,6 +232,9 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
         fileName: result.fileName,
         downloadUrl: result.downloadUrl,
         previewUrls: result.previewUrls,
+        qualityIssues: result.quality?.issues,
+        narrativeQuality: result.quality?.narrative,
+        slides: result.slides ?? current.slides,
       }));
       setMode("preview");
       setMessage("PowerPoint is up to date.");
@@ -171,12 +242,85 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
       setMessage(error instanceof Error ? error.message : "Export failed.");
     } finally {
       setExporting(false);
+      setOrchestrating(false);
     }
+  };
+
+  const changeLayout = () => {
+    if (!slide || slide.chart || slide.table || activeSlide === 0) return;
+    const alternatives = slide.layoutAlternatives?.length
+      ? slide.layoutAlternatives
+      : (["split", "list", "statement"] as const);
+    const nextLayout = alternatives[0] ?? "split";
+    const templateIds = {
+      cover: "cover-accent-rail", statement: "statement-focus", split: "split-narrative-list",
+      list: "numbered-list", comparison: "two-column-comparison", timeline: "milestone-timeline",
+      quote: "editorial-quote", closing: "closing-halo", chart: "data-chart", table: "data-table",
+    } as const;
+    updateSlide((current) => ({
+      ...current,
+      layout: nextLayout,
+      templateId: templateIds[nextLayout],
+      layoutReason: "Selected as an alternate composition for the same content.",
+      layoutAlternatives: [current.layout ?? "split", ...alternatives.slice(1)],
+    }));
+    setDeck((current) => ({ ...current, narrativeQuality: undefined }));
+    setMessage(`Changed slide ${activeSlide + 1} to ${nextLayout}.`);
+  };
+
+  const importTemplate = async (file?: File) => {
+    if (!file) return;
+    setImportingTemplate(true);
+    setMessage(null);
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      const response = await fetch("/api/presentations/templates/import", { method: "POST", body: form });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Template import failed.");
+      setDeck((current) => ({
+        ...current,
+        brand: { ...current.brand, ...result.brand },
+        masterProfile: result.profile,
+        generationStatus: "drafting",
+        downloadUrl: undefined,
+        previewUrls: [],
+        qualityIssues: [],
+      }));
+      setMode("edit");
+      setMessage(`Imported ${result.profile.layoutNames.length} layouts and ${result.profile.assetCount} master assets.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Template import failed.");
+    } finally {
+      setImportingTemplate(false);
+    }
+  };
+
+  const removeTemplate = () => {
+    setMode("edit");
+    setDeck((current) => ({
+      ...current,
+      masterProfile: undefined,
+      generationStatus: "drafting",
+      downloadUrl: undefined,
+      previewUrls: [],
+      qualityIssues: [],
+    }));
+    setMessage("Corporate template removed. Imported brand values remain editable.");
   };
 
   const duplicateSlide = () => {
     if (!slide) return;
-    const copy = { ...slide, bullets: slide.bullets ? [...slide.bullets] : undefined };
+    const copy = {
+      ...slide,
+      bullets: slide.bullets ? [...slide.bullets] : undefined,
+      chart: slide.chart
+        ? { ...slide.chart, categories: [...slide.chart.categories], series: slide.chart.series.map((series) => ({ ...series, values: [...series.values] })) }
+        : undefined,
+      table: slide.table
+        ? { headers: [...slide.table.headers], rows: slide.table.rows.map((row) => [...row]) }
+        : undefined,
+    };
     setDeck((current) => {
       const next = [...(current.slides ?? [])];
       next.splice(activeSlide + 1, 0, copy);
@@ -218,7 +362,8 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
               ) : (
                 <div className="flex aspect-video items-center justify-center bg-muted px-2 text-center text-[10px] text-muted-foreground">Draft slide {index + 1}</div>
               )}
-              <p className="truncate px-2 py-1.5 text-[11px] text-muted-foreground">{index + 1}. {item.title}</p>
+              <p className="truncate px-2 pt-1.5 text-[11px] text-muted-foreground">{index + 1}. {item.title}</p>
+              {item.templateId ? <p className="truncate px-2 pb-1.5 text-[9px] text-muted-foreground/70">{item.templateId}</p> : null}
             </button>
           ))}
         </div>
@@ -228,7 +373,7 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
         <div className="flex h-11 shrink-0 items-center justify-between border-b bg-background px-3">
           <div className="flex items-center gap-2 text-xs">
             {exporting || deck.generationStatus === "building" ? <LoaderCircleIcon className="size-3.5 animate-spin text-primary" /> : <CheckIcon className="size-3.5 text-emerald-600" />}
-            <span>{exporting ? "Updating PowerPoint" : deck.generationStatus === "building" ? "Content ready, composing PowerPoint" : deck.generationStatus === "drafting" ? "Draft has unpublished changes" : "PowerPoint ready"}</span>
+            <span>{exporting ? "Updating PowerPoint" : deck.generationStatus === "building" ? "Content ready, composing PowerPoint" : deck.generationStatus === "drafting" ? "Draft has unpublished changes" : deck.qualityIssues?.length ? `PowerPoint ready · ${deck.qualityIssues.length} layout warning${deck.qualityIssues.length === 1 ? "" : "s"}` : "PowerPoint ready"}</span>
           </div>
           <div className="flex gap-1">
             <div className="mr-2 flex rounded-lg bg-muted p-0.5">
@@ -243,12 +388,21 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
           {mode === "preview" && deck.previewUrls?.[activeSlide] ? (
             <img src={deck.previewUrls[activeSlide]} alt={`Rendered slide ${activeSlide + 1}`} className="aspect-video w-full max-w-5xl bg-white object-contain shadow-[0_18px_60px_rgba(0,0,0,0.18)] outline outline-black/10 dark:outline-white/10" />
           ) : (
-          <section className={`relative aspect-video w-full max-w-5xl overflow-hidden shadow-[0_18px_60px_rgba(0,0,0,0.18)] outline outline-black/10 dark:outline-white/10 ${theme.canvas}`}>
+          <section className={`relative aspect-video w-full max-w-5xl overflow-hidden shadow-[0_18px_60px_rgba(0,0,0,0.18)] outline outline-black/10 dark:outline-white/10 ${theme.canvas}`} style={deck.brand ? { backgroundColor: deck.brand.background ?? deck.design?.background, color: deck.brand.foreground ?? deck.design?.foreground } : undefined}>
             <div className={`absolute inset-x-0 top-0 h-1.5 ${theme.accent}`} />
             <div className="flex h-full flex-col p-[7%]">
               <p className="mb-3 text-xs font-semibold opacity-60">{String(activeSlide + 1).padStart(2, "0")}</p>
                 <Textarea rows={2} value={slide.title} onFocus={() => setSelection({ field: "title" })} onChange={(event) => { setSelection({ field: "title" }); updateSlide((current) => ({ ...current, title: event.target.value })); }} className="field-sizing-fixed h-20 min-h-0 resize-none border-transparent bg-transparent p-0 text-3xl leading-tight font-semibold text-inherit shadow-none focus-visible:border-current/20 focus-visible:ring-0" aria-label="Slide title" />
               <Input value={slide.subtitle ?? ""} placeholder="Add a supporting line" onFocus={() => setSelection({ field: "subtitle" })} onChange={(event) => { setSelection({ field: "subtitle" }); updateSlide((current) => ({ ...current, subtitle: event.target.value })); }} className={`mt-2 border-transparent bg-transparent px-0 shadow-none focus-visible:border-current/20 focus-visible:ring-0 ${theme.muted}`} aria-label="Slide subtitle" />
+              {slide.chart ? (
+                <div className="mt-5 min-h-0 flex-1 overflow-y-auto pr-1">
+                  <ChartDataEditor slide={slide} update={(next) => updateSlide(() => next)} />
+                </div>
+              ) : slide.table ? (
+                <div className="mt-5 min-h-0 flex-1 overflow-y-auto pr-1">
+                  <TableDataEditor slide={slide} update={(next) => updateSlide(() => next)} />
+                </div>
+              ) : (
               <div className="mt-5 grid min-h-0 flex-1 grid-cols-2 gap-8">
                 <Textarea value={slide.body ?? ""} placeholder="Add body text" onFocus={() => setSelection({ field: "body" })} onChange={(event) => { setSelection({ field: "body" }); updateSlide((current) => ({ ...current, body: event.target.value })); }} className={`field-sizing-fixed h-full resize-none border-transparent bg-transparent p-0 text-base leading-6 shadow-none focus-visible:border-current/20 focus-visible:ring-0 ${theme.muted}`} aria-label="Slide body" />
                 <div className="space-y-2 overflow-hidden">
@@ -260,6 +414,7 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
                   <button type="button" className="text-xs opacity-60 hover:opacity-100" onClick={() => updateSlide((current) => ({ ...current, bullets: [...(current.bullets ?? []), "New point"] }))}>+ Add point</button>
                 </div>
               </div>
+              )}
               <p className="mt-3 text-right text-[10px] opacity-40">{deck.title}</p>
             </div>
           </section>
@@ -278,9 +433,61 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
         <Button className="mt-2 w-full active:scale-[0.96] transition-transform" onClick={rewriteSelection} disabled={mode === "preview" || rewriting || !selectedText.trim()}>{rewriting ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}Rewrite selection</Button>
         {message && <p className="mt-3 text-xs leading-5 text-muted-foreground" role="status">{message}</p>}
         <div className="my-5 h-px bg-border" />
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium">Smart layout</p>
+          <span className="text-xs font-semibold tabular-nums text-primary">{deck.narrativeQuality?.score ?? "--"}</span>
+        </div>
+        <Button variant="outline" className="mt-2 w-full active:scale-[0.96] transition-transform" onClick={() => void exportDeck("auto")} disabled={mode === "preview" || exporting}>
+          {orchestrating ? <LoaderCircleIcon className="animate-spin" /> : <LayoutDashboardIcon />}Auto arrange deck
+        </Button>
+        <Button variant="ghost" className="mt-1 w-full justify-start text-xs" onClick={changeLayout} disabled={mode === "preview" || activeSlide === 0 || Boolean(slide.chart || slide.table)}>
+          <LayoutDashboardIcon />Try alternate layout
+        </Button>
+        <p className="mt-2 text-[11px] leading-4 text-muted-foreground">{slide.layoutReason ?? "Auto arrange analyzes each slide's narrative role and content capacity."}</p>
+        {deck.narrativeQuality ? (
+          <div className="mt-2 grid grid-cols-4 gap-1 text-center text-[9px] text-muted-foreground">
+            {Object.entries(deck.narrativeQuality.dimensions).map(([label, value]) => <div key={label}><span className="block font-semibold text-foreground">{value}</span>{label}</div>)}
+          </div>
+        ) : null}
+        <div className="my-5 h-px bg-border" />
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium">Corporate template</p>
+          {deck.masterProfile ? <Button size="icon-xs" variant="ghost" onClick={removeTemplate} disabled={mode === "preview" || importingTemplate} aria-label="Remove corporate template" title="Remove corporate template"><Trash2Icon /></Button> : null}
+        </div>
+        <label className={`mt-2 flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border text-xs font-medium transition-colors hover:bg-muted ${mode === "preview" || importingTemplate ? "pointer-events-none opacity-50" : ""}`}>
+          {importingTemplate ? <LoaderCircleIcon className="size-4 animate-spin" /> : <FileUpIcon className="size-4" />}
+          {deck.masterProfile ? "Replace .pptx" : "Import .pptx"}
+          <input type="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" className="sr-only" disabled={mode === "preview" || importingTemplate} onChange={(event) => { void importTemplate(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+        </label>
+        {deck.masterProfile ? (
+          <div className="mt-2 border-l-2 border-primary/40 pl-3 text-[11px] leading-5 text-muted-foreground">
+            <p className="truncate font-medium text-foreground" title={deck.masterProfile.sourceName}>{deck.masterProfile.sourceName}</p>
+            <p>{deck.masterProfile.masterNames.length} master · {deck.masterProfile.layoutNames.length} layouts · {deck.masterProfile.assetCount} assets</p>
+            <p className="truncate">{[deck.masterProfile.fonts.major, deck.masterProfile.fonts.minor].filter(Boolean).join(" / ") || "No theme fonts detected"}</p>
+            <div className="mt-1 flex gap-1">{deck.masterProfile.colors.slice(0, 8).map((color) => <span key={color} className="size-3 rounded-sm outline outline-black/10 dark:outline-white/10" style={{ backgroundColor: color }} title={color} />)}</div>
+            {deck.masterProfile.warnings.length ? <p className="mt-1 text-amber-700 dark:text-amber-400">{deck.masterProfile.warnings.length} import warning{deck.masterProfile.warnings.length === 1 ? "" : "s"}</p> : null}
+          </div>
+        ) : <p className="mt-2 text-[11px] leading-4 text-muted-foreground">Maps theme colors, fonts, simple master shapes, text, and raster logos.</p>}
+        <div className="my-5 h-px bg-border" />
+        <p className="mb-2 text-xs font-medium">Brand</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Input value={deck.brand?.name ?? ""} disabled={mode === "preview"} onChange={(event) => updateBrand("name", event.target.value)} placeholder="Brand name" aria-label="Brand name" />
+          <Input value={deck.brand?.logoText ?? ""} disabled={mode === "preview"} onChange={(event) => updateBrand("logoText", event.target.value)} placeholder="Logo text" aria-label="Logo text" />
+          <Input value={deck.brand?.titleFont ?? ""} disabled={mode === "preview"} onChange={(event) => updateBrand("titleFont", event.target.value)} placeholder="Title font" aria-label="Title font" />
+          <Input value={deck.brand?.bodyFont ?? ""} disabled={mode === "preview"} onChange={(event) => updateBrand("bodyFont", event.target.value)} placeholder="Body font" aria-label="Body font" />
+        </div>
+        <Input value={deck.brand?.footer ?? ""} disabled={mode === "preview"} onChange={(event) => updateBrand("footer", event.target.value)} placeholder="Footer" aria-label="Brand footer" className="mt-2" />
+        <div className="mt-2 flex gap-2">
+          {(["background", "foreground", "muted", "accent", "secondary"] as const).map((field) => (
+            <label key={field} className="relative size-7 overflow-hidden rounded-md outline outline-black/10 dark:outline-white/10" title={field}>
+              <input type="color" value={deck.brand?.[field] ?? deck.design?.[field] ?? "#000000"} disabled={mode === "preview"} onChange={(event) => updateBrand(field, event.target.value)} className="absolute -inset-2 size-11 cursor-pointer border-0 p-0 disabled:cursor-not-allowed" aria-label={`Brand ${field}`} />
+            </label>
+          ))}
+        </div>
+        <div className="my-5 h-px bg-border" />
         <label className="text-xs font-medium" htmlFor="deck-title">Deck title</label>
         <Input id="deck-title" value={deck.title} disabled={mode === "preview"} onChange={(event) => setDeck((current) => ({ ...current, title: event.target.value, generationStatus: "drafting", downloadUrl: undefined, previewUrls: [] }))} className="mt-1" />
-        <Button variant="outline" className="mt-3 w-full active:scale-[0.96] transition-transform" onClick={exportDeck} disabled={exporting}>{exporting ? <LoaderCircleIcon className="animate-spin" /> : <DownloadIcon />}Update PowerPoint</Button>
+        <Button variant="outline" className="mt-3 w-full active:scale-[0.96] transition-transform" onClick={() => void exportDeck("preserve")} disabled={exporting}>{exporting ? <LoaderCircleIcon className="animate-spin" /> : <DownloadIcon />}Update PowerPoint</Button>
         {deck.downloadUrl && <Button className="mt-2 w-full" nativeButton={false} render={<a href={deck.downloadUrl} download />}><DownloadIcon />Download .pptx</Button>}
       </aside>
     </div>
