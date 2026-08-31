@@ -12,7 +12,9 @@ import {
   CopyIcon,
   DownloadIcon,
   FileIcon,
+  EyeIcon,
   LoaderCircleIcon,
+  PencilIcon,
   PlusIcon,
   SparklesIcon,
   Trash2Icon,
@@ -49,6 +51,9 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
   const [rewriting, setRewriting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [mode, setMode] = useState<"preview" | "edit">(
+    artifact.previewUrls?.length ? "preview" : "edit",
+  );
 
   useEffect(() => {
     setDeck((current) =>
@@ -57,6 +62,10 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
             ...current,
             fileName: current.fileName ?? artifact.fileName,
             downloadUrl: current.downloadUrl ?? artifact.downloadUrl,
+            previewUrls:
+              current.generationStatus === "drafting"
+                ? current.previewUrls
+                : (artifact.previewUrls ?? current.previewUrls),
             generationStatus:
               current.generationStatus === "drafting"
                 ? "drafting"
@@ -66,6 +75,12 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
         : artifact,
     );
   }, [artifact]);
+
+  useEffect(() => {
+    if (artifact.generationStatus === "ready" && artifact.previewUrls?.length) {
+      setMode("preview");
+    }
+  }, [artifact.generationStatus, artifact.previewUrls]);
 
   const slides = deck.slides ?? [];
   const slide = slides[activeSlide] ?? slides[0];
@@ -77,10 +92,12 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
   }, [selection, slide]);
 
   const updateSlide = (update: (current: NonNullable<Artifact["slides"]>[number]) => NonNullable<Artifact["slides"]>[number]) => {
+    setMode("edit");
     setDeck((current) => ({
       ...current,
       generationStatus: "drafting",
       downloadUrl: undefined,
+      previewUrls: [],
       slides: (current.slides ?? []).map((item, index) =>
         index === activeSlide ? update(item) : item,
       ),
@@ -135,6 +152,7 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
           title: deck.title,
           subtitle: deck.subtitle,
           theme: deck.theme ?? "tech",
+          design: deck.design,
           slides,
         }),
       });
@@ -145,7 +163,9 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
         generationStatus: "ready",
         fileName: result.fileName,
         downloadUrl: result.downloadUrl,
+        previewUrls: result.previewUrls,
       }));
+      setMode("preview");
       setMessage("PowerPoint is up to date.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Export failed.");
@@ -160,7 +180,7 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
     setDeck((current) => {
       const next = [...(current.slides ?? [])];
       next.splice(activeSlide + 1, 0, copy);
-      return { ...current, slides: next, generationStatus: "drafting", downloadUrl: undefined };
+      return { ...current, slides: next, generationStatus: "drafting", downloadUrl: undefined, previewUrls: [] };
     });
     setActiveSlide(activeSlide + 1);
   };
@@ -172,6 +192,7 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
       slides: (current.slides ?? []).filter((_, index) => index !== activeSlide),
       generationStatus: "drafting",
       downloadUrl: undefined,
+      previewUrls: [],
     }));
     setActiveSlide(Math.max(0, activeSlide - 1));
   };
@@ -184,18 +205,19 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
         <div className="mb-2 flex items-center justify-between px-1">
           <span className="text-xs font-medium text-muted-foreground">{slides.length} slides</span>
           <Button size="icon-xs" variant="ghost" onClick={() => {
-            setDeck((current) => ({ ...current, slides: [...(current.slides ?? []), { title: "New slide", bullets: [] }], generationStatus: "drafting", downloadUrl: undefined }));
+            setMode("edit");
+            setDeck((current) => ({ ...current, slides: [...(current.slides ?? []), { title: "New slide", bullets: [] }], generationStatus: "drafting", downloadUrl: undefined, previewUrls: [] }));
             setActiveSlide(slides.length);
           }} aria-label="Add slide"><PlusIcon /></Button>
         </div>
         <div className="grid gap-2">
           {slides.map((item, index) => (
             <button key={`${index}-${item.title}`} type="button" onClick={() => setActiveSlide(index)} className={`group text-left transition-[background-color,box-shadow] duration-150 ${index === activeSlide ? "bg-accent shadow-[inset_3px_0_0_var(--primary)]" : "hover:bg-muted"}`}>
-              <div className={`aspect-video overflow-hidden p-2 text-[7px] leading-tight ${theme.canvas}`}>
-                <div className={`mb-2 h-0.5 w-full ${theme.accent}`} />
-                <strong className="line-clamp-2">{item.title}</strong>
-                <p className={`mt-1 line-clamp-2 ${theme.muted}`}>{item.subtitle || item.body}</p>
-              </div>
+              {deck.previewUrls?.[index] ? (
+                <img src={deck.previewUrls[index]} alt={`Slide ${index + 1}`} className="aspect-video w-full bg-white object-contain outline outline-black/10 dark:outline-white/10" />
+              ) : (
+                <div className="flex aspect-video items-center justify-center bg-muted px-2 text-center text-[10px] text-muted-foreground">Draft slide {index + 1}</div>
+              )}
               <p className="truncate px-2 py-1.5 text-[11px] text-muted-foreground">{index + 1}. {item.title}</p>
             </button>
           ))}
@@ -209,12 +231,18 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
             <span>{exporting ? "Updating PowerPoint" : deck.generationStatus === "building" ? "Content ready, composing PowerPoint" : deck.generationStatus === "drafting" ? "Draft has unpublished changes" : "PowerPoint ready"}</span>
           </div>
           <div className="flex gap-1">
-            <Button size="icon-sm" variant="ghost" onClick={duplicateSlide} aria-label="Duplicate slide"><CopyIcon /></Button>
-            <Button size="icon-sm" variant="ghost" onClick={removeSlide} disabled={slides.length <= 1} aria-label="Delete slide"><Trash2Icon /></Button>
+            <div className="mr-2 flex rounded-lg bg-muted p-0.5">
+              <Button size="sm" variant={mode === "preview" ? "secondary" : "ghost"} onClick={() => setMode("preview")} disabled={!deck.previewUrls?.length}><EyeIcon />Preview</Button>
+              <Button size="sm" variant={mode === "edit" ? "secondary" : "ghost"} onClick={() => setMode("edit")}><PencilIcon />Edit</Button>
+            </div>
+            {mode === "edit" ? <><Button size="icon-sm" variant="ghost" onClick={duplicateSlide} aria-label="Duplicate slide"><CopyIcon /></Button><Button size="icon-sm" variant="ghost" onClick={removeSlide} disabled={slides.length <= 1} aria-label="Delete slide"><Trash2Icon /></Button></> : null}
           </div>
         </div>
         {(exporting || deck.generationStatus === "building") && <div className="h-0.5 overflow-hidden bg-muted"><div className="h-full w-2/3 animate-pulse bg-primary" /></div>}
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-6">
+          {mode === "preview" && deck.previewUrls?.[activeSlide] ? (
+            <img src={deck.previewUrls[activeSlide]} alt={`Rendered slide ${activeSlide + 1}`} className="aspect-video w-full max-w-5xl bg-white object-contain shadow-[0_18px_60px_rgba(0,0,0,0.18)] outline outline-black/10 dark:outline-white/10" />
+          ) : (
           <section className={`relative aspect-video w-full max-w-5xl overflow-hidden shadow-[0_18px_60px_rgba(0,0,0,0.18)] outline outline-black/10 dark:outline-white/10 ${theme.canvas}`}>
             <div className={`absolute inset-x-0 top-0 h-1.5 ${theme.accent}`} />
             <div className="flex h-full flex-col p-[7%]">
@@ -235,10 +263,11 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
               <p className="mt-3 text-right text-[10px] opacity-40">{deck.title}</p>
             </div>
           </section>
+          )}
         </div>
       </main>
 
-      <aside className="overflow-y-auto border-l bg-background p-4">
+      <aside className={`overflow-y-auto border-l bg-background p-4 ${mode === "preview" ? "opacity-60" : ""}`}>
         <div className="flex items-center gap-2"><SparklesIcon className="size-4 text-primary" /><h3 className="text-sm font-semibold">AI rewrite</h3></div>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">Editing {selection.field === "bullet" ? `point ${(selection.bulletIndex ?? 0) + 1}` : selection.field} on slide {activeSlide + 1}</p>
         <div className="mt-3 rounded-md bg-muted p-2 text-xs leading-5 text-muted-foreground line-clamp-4">{selectedText || "Select a text field on the slide."}</div>
@@ -246,11 +275,11 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
           {["Make it shorter", "Improve clarity", "More persuasive"].map((prompt) => <button key={prompt} type="button" onClick={() => setInstruction(prompt)} className="rounded-md border px-2 py-1 text-[11px] hover:bg-muted">{prompt}</button>)}
         </div>
         <Textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} className="mt-3 min-h-24 resize-none" placeholder="Describe the change" />
-        <Button className="mt-2 w-full active:scale-[0.96] transition-transform" onClick={rewriteSelection} disabled={rewriting || !selectedText.trim()}>{rewriting ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}Rewrite selection</Button>
+        <Button className="mt-2 w-full active:scale-[0.96] transition-transform" onClick={rewriteSelection} disabled={mode === "preview" || rewriting || !selectedText.trim()}>{rewriting ? <LoaderCircleIcon className="animate-spin" /> : <SparklesIcon />}Rewrite selection</Button>
         {message && <p className="mt-3 text-xs leading-5 text-muted-foreground" role="status">{message}</p>}
         <div className="my-5 h-px bg-border" />
         <label className="text-xs font-medium" htmlFor="deck-title">Deck title</label>
-        <Input id="deck-title" value={deck.title} onChange={(event) => setDeck((current) => ({ ...current, title: event.target.value, generationStatus: "drafting", downloadUrl: undefined }))} className="mt-1" />
+        <Input id="deck-title" value={deck.title} disabled={mode === "preview"} onChange={(event) => setDeck((current) => ({ ...current, title: event.target.value, generationStatus: "drafting", downloadUrl: undefined, previewUrls: [] }))} className="mt-1" />
         <Button variant="outline" className="mt-3 w-full active:scale-[0.96] transition-transform" onClick={exportDeck} disabled={exporting}>{exporting ? <LoaderCircleIcon className="animate-spin" /> : <DownloadIcon />}Update PowerPoint</Button>
         {deck.downloadUrl && <Button className="mt-2 w-full" nativeButton={false} render={<a href={deck.downloadUrl} download />}><DownloadIcon />Download .pptx</Button>}
       </aside>

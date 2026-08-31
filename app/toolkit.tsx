@@ -3,7 +3,7 @@
 import { Image } from "@/components/image";
 import { Button } from "@/components/ui/button";
 import { defineToolkit, externalTool, humanTool, stubTool } from "@assistant-ui/react";
-import { DownloadIcon, FilePenLineIcon, FileSlidersIcon, FolderOpenIcon } from "lucide-react";
+import { CheckIcon, DownloadIcon, FilePenLineIcon, FileSlidersIcon, FolderOpenIcon, SparklesIcon } from "lucide-react";
 import { z } from "zod";
 
 function ToolCard({
@@ -274,6 +274,68 @@ export default defineToolkit({
       );
     },
   },
+  choose_presentation_style: {
+    description:
+      "Pause before creating a new presentation and let the user choose one of three AI-generated visual directions. Each direction must be tailored to this specific topic, audience, and purpose, and materially differ in palette, typography, composition, and density. Use this exactly once before create_presentation unless the user already supplied a clear visual direction or asked you to choose for them.",
+    parameters: z.object({
+      designRead: z.string().describe("One concise sentence explaining the inferred audience, purpose, and visual need"),
+      options: z.array(z.object({
+        id: z.string(),
+        name: z.string().describe("Short evocative direction name, not a generic template label"),
+        mood: z.string().describe("Three or four plain-language mood words"),
+        rationale: z.string().describe("Why this direction fits the user's topic and audience"),
+        background: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+        foreground: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+        muted: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+        accent: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+        secondary: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+        typography: z.enum(["modern", "editorial", "technical", "friendly"]),
+        composition: z.enum(["bold", "editorial", "structured", "cinematic"]),
+        density: z.enum(["airy", "balanced", "dense"]),
+        recommended: z.boolean().optional(),
+      })).length(3),
+    }),
+    execute: humanTool(),
+    render: ({ args, result, addResult }) => {
+      const options = args.options ?? [];
+      const selected = result && typeof result === "object" && "selected" in result
+        ? String((result as { selected: string }).selected)
+        : null;
+      if (selected) {
+        const option = options.find((item) => item.id === selected);
+        return <ToolCard title="Visual direction" body={`Selected ${option?.name ?? selected}`} tone="ok" />;
+      }
+      if (options.length < 3) {
+        return <ToolCard title="Visual direction" body="Analyzing the brief and composing three tailored directions" tone="wait" />;
+      }
+      return (
+        <div className="border-border/60 bg-card my-3 overflow-hidden rounded-lg border">
+          <div className="border-b px-4 py-3">
+            <div className="flex items-center gap-2 text-sm font-semibold"><SparklesIcon className="size-4 text-primary" />Choose a look</div>
+            <p className="text-muted-foreground mt-1 text-xs leading-5">{args.designRead || "Three directions tailored to this presentation"}</p>
+          </div>
+          <div className="grid gap-2 p-3 lg:grid-cols-3">
+            {options.map((option) => (
+              <button key={option.id} type="button" onClick={() => addResult({ selected: option.id, design: option })} className="group overflow-hidden rounded-md border text-left transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:border-foreground/30 hover:shadow-md active:translate-y-0">
+                <div className="relative aspect-[16/7] overflow-hidden p-3" style={{ backgroundColor: option.background, color: option.foreground }}>
+                  <div className="h-1 w-10" style={{ backgroundColor: option.accent }} />
+                  <div className="mt-5 max-w-[80%] text-base font-semibold leading-tight">{option.name}</div>
+                  <div className="absolute right-3 bottom-3 flex gap-1">
+                    {[option.foreground, option.muted, option.accent, option.secondary].map((color, colorIndex) => <span key={`${color}-${colorIndex}`} className="size-3 rounded-full outline outline-black/10" style={{ backgroundColor: color }} />)}
+                  </div>
+                </div>
+                <div className="p-3">
+                  <div className="flex items-center justify-between gap-2"><span className="text-sm font-medium">{option.name}</span>{option.recommended ? <span className="flex items-center gap-1 text-[10px] text-emerald-600"><CheckIcon className="size-3" />Best fit</span> : null}</div>
+                  <p className="text-muted-foreground mt-1 text-[11px]">{option.mood}</p>
+                  <p className="mt-2 line-clamp-3 text-xs leading-5">{option.rationale}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    },
+  },
   create_presentation: {
     description:
       "Create a real, downloadable PowerPoint (.pptx) file and open a slide preview in the canvas. Use this whenever the user asks for a PPT, PowerPoint, slide deck, or presentation.",
@@ -284,6 +346,17 @@ export default defineToolkit({
         .enum(["tech", "light", "dark"])
         .optional()
         .describe("Visual theme; use tech for technology topics"),
+      design: z.object({
+        name: z.string(), mood: z.string(), rationale: z.string(),
+        background: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+        foreground: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+        muted: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+        accent: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+        secondary: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+        typography: z.enum(["modern", "editorial", "technical", "friendly"]),
+        composition: z.enum(["bold", "editorial", "structured", "cinematic"]),
+        density: z.enum(["airy", "balanced", "dense"]),
+      }).optional().describe("The exact visual direction selected by the user"),
       slides: z
         .array(
           z.object({
@@ -294,6 +367,7 @@ export default defineToolkit({
               .array(z.string())
               .optional()
               .describe("Up to five concise audience-facing bullet points"),
+            layout: z.enum(["cover", "statement", "split", "list", "comparison", "timeline", "quote", "closing"]).optional().describe("AI-selected composition for this slide; vary adjacent slides"),
           }),
         )
         .min(1)

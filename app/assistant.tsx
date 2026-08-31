@@ -115,8 +115,10 @@ function ArtifactBridge({ onPresent }: { onPresent: (artifact: Artifact) => void
           title: args.title,
           subtitle: args.subtitle,
           theme: args.theme ?? "tech",
+          design: args.design,
           slides: args.slides,
           generationStatus: "building",
+          previewUrls: [],
         } as Artifact);
         const response = await fetch("/api/presentations", {
           method: "POST",
@@ -130,9 +132,11 @@ function ArtifactBridge({ onPresent }: { onPresent: (artifact: Artifact) => void
             title: args.title,
             subtitle: args.subtitle,
             theme: args.theme ?? "tech",
+            design: args.design,
             slides: args.slides,
             generationStatus: "error",
             generationError: result.error || "Could not create the PowerPoint file.",
+            previewUrls: [],
           } as Artifact);
           throw new Error(result.error || "Could not create the PowerPoint file.");
         }
@@ -141,8 +145,10 @@ function ArtifactBridge({ onPresent }: { onPresent: (artifact: Artifact) => void
           title: args.title,
           subtitle: args.subtitle,
           theme: args.theme ?? "tech",
+          design: args.design,
           slides: args.slides,
           generationStatus: "ready",
+          previewUrls: result.previewUrls,
           fileName: result.fileName,
           downloadUrl: result.downloadUrl,
         } as Artifact);
