@@ -33,11 +33,11 @@ import {
   ComposerPrimitive,
   ErrorPrimitive,
   groupPartByType,
+  MessagePartPrimitive,
   MessagePrimitive,
   SuggestionPrimitive,
   ThreadPrimitive,
   type FileMessagePartComponent,
-  type ImageMessagePartComponent,
   type ToolCallMessagePartComponent,
   useAuiState,
 } from "@assistant-ui/react";
@@ -88,10 +88,6 @@ export type ThreadProps = {
 const EMPTY_COMPONENTS: ThreadComponents = {};
 
 const ThreadComponentsContext = createContext<ThreadComponents>(EMPTY_COMPONENTS);
-const IMAGE_TOOL_NAMES: Record<string, true> = {
-  generate_image: true,
-  edit_image: true,
-};
 
 const FileOrImage: FileMessagePartComponent = (props) => {
   if (!props.mimeType.toLowerCase().startsWith("image/") || props.sourceType === "id") {
@@ -106,24 +102,11 @@ const FileOrImage: FileMessagePartComponent = (props) => {
   return <Image {...imageProps} type="image" image={image} />;
 };
 
-const toolGroupBy = groupPartByType({
+const messageGroupBy = groupPartByType({
   reasoning: ["group-chainOfThought", "group-reasoning"],
   "tool-call": ["group-chainOfThought", "group-tool"],
   "standalone-tool-call": [],
 });
-
-// Image tools render their result inline in the message, outside the
-// collapsible tool-call group, so generated images are visible directly.
-const messageGroupBy: typeof toolGroupBy = (part, context) => {
-  if (part.type === "tool-call" && IMAGE_TOOL_NAMES[part.toolName]) {
-    return [];
-  }
-  return toolGroupBy(part, context);
-};
-type GroupByWithMemoKey = typeof toolGroupBy & Record<symbol, string | undefined>;
-(messageGroupBy as GroupByWithMemoKey)[Symbol.for("@assistant-ui/groupBy.memoKey")] = (
-  toolGroupBy as GroupByWithMemoKey
-)[Symbol.for("@assistant-ui/groupBy.memoKey")];
 
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // the composer mounts centered. Loads after startup keep the docked layout.
@@ -405,6 +388,24 @@ const MessageError: FC = () => {
   );
 };
 
+const AssistantResponsePending: FC = () => (
+  <div
+    data-slot="aui_assistant-response-pending"
+    role="status"
+    aria-label="Assistant is responding"
+    className="text-muted-foreground flex h-6 items-center gap-1"
+  >
+    {[0, 1, 2].map((index) => (
+      <span
+        key={index}
+        className="size-1.5 animate-bounce rounded-full bg-current motion-reduce:animate-pulse"
+        style={{ animationDelay: `${index * 120}ms` }}
+      />
+    ))}
+    <span className="sr-only">Assistant is responding</span>
+  </div>
+);
+
 const AssistantMessage: FC = () => {
   const {
     ToolFallback: ToolFallbackComponent = ToolFallback,
@@ -426,7 +427,7 @@ const AssistantMessage: FC = () => {
         data-slot="aui_assistant-message-content"
         className="text-foreground px-2 leading-relaxed wrap-break-word"
       >
-        <MessagePrimitive.GroupedParts groupBy={messageGroupBy}>
+        <MessagePrimitive.GroupedParts groupBy={messageGroupBy} indicator="empty">
           {({ part, children }) => {
             switch (part.type) {
               case "group-chainOfThought":
@@ -479,15 +480,7 @@ const AssistantMessage: FC = () => {
                   </div>
                 );
               case "indicator":
-                return (
-                  <span
-                    data-slot="aui_assistant-message-indicator"
-                    className="animate-pulse font-sans"
-                    aria-label="Assistant is working"
-                  >
-                    {"●"}
-                  </span>
-                );
+                return <AssistantResponsePending />;
               default:
                 return null;
             }
@@ -551,18 +544,6 @@ const AssistantActionBar: FC = () => {
   );
 };
 
-const UserFilePart: FileMessagePartComponent = (part) => (
-  <div data-slot="aui_user-message-file" className="py-1">
-    <File {...part} />
-  </div>
-);
-
-const UserImagePart: ImageMessagePartComponent = (part) => (
-  <div data-slot="aui_user-message-image" className="py-1">
-    <Image {...part} />
-  </div>
-);
-
 const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
@@ -574,7 +555,28 @@ const UserMessage: FC = () => {
 
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
         <div className="aui-user-message-content peer bg-muted text-foreground rounded-xl px-4 py-2 wrap-break-word empty:hidden">
-          <MessagePrimitive.Parts components={{ File: UserFilePart, Image: UserImagePart }} />
+          <MessagePrimitive.Parts>
+            {({ part }) => {
+              switch (part.type) {
+                case "text":
+                  return <MessagePartPrimitive.Text />;
+                case "file":
+                  return (
+                    <div data-slot="aui_user-message-file" className="py-1">
+                      <File {...part} />
+                    </div>
+                  );
+                case "image":
+                  return (
+                    <div data-slot="aui_user-message-image" className="py-1">
+                      <Image {...part} />
+                    </div>
+                  );
+                default:
+                  return null;
+              }
+            }}
+          </MessagePrimitive.Parts>
         </div>
         <div className="aui-user-action-bar-wrapper absolute start-0 top-1/2 -translate-x-full -translate-y-1/2 pe-2 peer-empty:hidden rtl:translate-x-full">
           <UserActionBar />

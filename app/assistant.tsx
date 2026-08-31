@@ -10,12 +10,8 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { useProviderSettings } from "@/hooks/use-provider-settings";
 import { useRemoteModels } from "@/hooks/use-remote-models";
 import type { Artifact } from "@/lib/artifacts";
+import { TaskFileAttachmentAdapter } from "@/lib/task-file-attachment-adapter";
 import { AssistantChatTransport, useChatRuntime } from "@assistant-ui/ai-sdk";
-import {
-  CompositeAttachmentAdapter,
-  SimpleImageAttachmentAdapter,
-  SimpleTextAttachmentAdapter,
-} from "@assistant-ui/core";
 import {
   AssistantRuntimeProvider,
   Suggestions,
@@ -29,10 +25,7 @@ import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 import toolkit from "./toolkit";
 
-const attachmentAdapter = new CompositeAttachmentAdapter([
-  new SimpleImageAttachmentAdapter(),
-  new SimpleTextAttachmentAdapter(),
-]);
+const attachmentAdapter = new TaskFileAttachmentAdapter();
 
 const STARTERS = Suggestions([
   {
@@ -75,6 +68,22 @@ function AgentWelcome() {
 }
 
 function ArtifactBridge({ onPresent }: { onPresent: (artifact: Artifact) => void }) {
+  const runFileAction = async (
+    input:
+      | { action: "list"; path?: string }
+      | { action: "read"; path: string }
+      | { action: "write"; path: string; content: string },
+  ) => {
+    const response = await fetch("/api/task-files", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Task file operation failed.");
+    return result;
+  };
+
   useAuiToolOverrides({
     present_artifact: {
       execute: async (args) => {
@@ -82,8 +91,33 @@ function ArtifactBridge({ onPresent }: { onPresent: (artifact: Artifact) => void
         return { shown: true };
       },
     },
+    list_files: {
+      execute: async ({ path }) => runFileAction({ action: "list", path }),
+    },
+    read_file: {
+      execute: async ({ path }) => {
+        const result = await runFileAction({ action: "read", path });
+        onPresent({ ...result, title: result.name ?? result.path } as Artifact);
+        return result;
+      },
+    },
+    write_file: {
+      execute: async ({ path, content }) => {
+        const result = await runFileAction({ action: "write", path, content });
+        onPresent({ ...result, title: result.name ?? result.path } as Artifact);
+        return result;
+      },
+    },
     create_presentation: {
       execute: async (args) => {
+        onPresent({
+          kind: "presentation",
+          title: args.title,
+          subtitle: args.subtitle,
+          theme: args.theme ?? "tech",
+          slides: args.slides,
+          generationStatus: "building",
+        } as Artifact);
         const response = await fetch("/api/presentations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -91,12 +125,24 @@ function ArtifactBridge({ onPresent }: { onPresent: (artifact: Artifact) => void
         });
         const result = await response.json();
         if (!response.ok) {
+          onPresent({
+            kind: "presentation",
+            title: args.title,
+            subtitle: args.subtitle,
+            theme: args.theme ?? "tech",
+            slides: args.slides,
+            generationStatus: "error",
+            generationError: result.error || "Could not create the PowerPoint file.",
+          } as Artifact);
           throw new Error(result.error || "Could not create the PowerPoint file.");
         }
         onPresent({
           kind: "presentation",
           title: args.title,
+          subtitle: args.subtitle,
+          theme: args.theme ?? "tech",
           slides: args.slides,
+          generationStatus: "ready",
           fileName: result.fileName,
           downloadUrl: result.downloadUrl,
         } as Artifact);
@@ -108,8 +154,8 @@ function ArtifactBridge({ onPresent }: { onPresent: (artifact: Artifact) => void
 }
 
 export const Assistant = () => {
-  const { settings, save } = useProviderSettings();
-  const { models, loading, error, refresh } = useRemoteModels(settings);
+  const { settings, save, ready } = useProviderSettings();
+  const { models, loading, error, refresh } = useRemoteModels(settings, ready);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
 
   useEffect(() => {

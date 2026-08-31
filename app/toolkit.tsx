@@ -3,7 +3,7 @@
 import { Image } from "@/components/image";
 import { Button } from "@/components/ui/button";
 import { defineToolkit, externalTool, humanTool, stubTool } from "@assistant-ui/react";
-import { DownloadIcon, FileSlidersIcon } from "lucide-react";
+import { DownloadIcon, FilePenLineIcon, FileSlidersIcon, FolderOpenIcon } from "lucide-react";
 import { z } from "zod";
 
 function ToolCard({
@@ -173,6 +173,107 @@ export default defineToolkit({
       />
     ),
   },
+  list_files: {
+    description:
+      "List files in the restricted task workspace. Use this to discover files created during the task.",
+    parameters: z.object({
+      path: z.string().optional().describe("Optional relative directory inside the task workspace"),
+    }),
+    execute: stubTool(),
+    render: ({ args, result, status }) => {
+      const files = (result as { files?: Array<{ path: string; size: number }> } | undefined)
+        ?.files;
+      return (
+        <ToolCard
+          title="Task files"
+          body={
+            status.type === "running"
+              ? `Listing ${args.path || "workspace"}`
+              : files?.length
+                ? files
+                    .slice(0, 12)
+                    .map((file) => `${file.path} (${file.size} bytes)`)
+                    .join("\n")
+                : "No task files found"
+          }
+          tone={status.type === "running" ? "wait" : "ok"}
+        />
+      );
+    },
+  },
+  read_file: {
+    display: "standalone",
+    description:
+      "Read a file from the restricted task workspace and open it in the canvas. Text files return their content; images, PDFs, and binary files return preview/download URLs.",
+    parameters: z.object({
+      path: z.string().describe("Relative path inside the task workspace"),
+    }),
+    execute: stubTool(),
+    render: ({ args, result, status }) => {
+      const file = result as { path?: string; size?: number; downloadUrl?: string } | undefined;
+      return (
+        <div className="border-border/60 bg-card my-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm">
+          <FolderOpenIcon className="text-muted-foreground size-4 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium">{file?.path ?? args.path}</p>
+            <p className="text-muted-foreground text-xs">
+              {status.type === "running"
+                ? "Opening file"
+                : `${file?.size ?? 0} bytes · Opened in canvas`}
+            </p>
+          </div>
+          {file?.downloadUrl ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              nativeButton={false}
+              render={<a href={file.downloadUrl} download />}
+            >
+              <DownloadIcon />
+              <span className="sr-only">Download file</span>
+            </Button>
+          ) : null}
+        </div>
+      );
+    },
+  },
+  write_file: {
+    display: "standalone",
+    description:
+      "Create or overwrite a UTF-8 text file in the restricted task workspace and open it in the canvas. Use relative paths only.",
+    parameters: z.object({
+      path: z.string().describe("Relative output path, including the file extension"),
+      content: z.string().describe("Complete UTF-8 file contents"),
+    }),
+    execute: stubTool(),
+    render: ({ args, result, status }) => {
+      const file = result as { path?: string; size?: number; downloadUrl?: string } | undefined;
+      return (
+        <div className="border-border/60 bg-card my-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm">
+          <FilePenLineIcon className="text-muted-foreground size-4 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium">{file?.path ?? args.path}</p>
+            <p className="text-muted-foreground text-xs">
+              {status.type === "running"
+                ? "Writing file"
+                : `${file?.size ?? 0} bytes · Saved and opened`}
+            </p>
+          </div>
+          {file?.downloadUrl ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              nativeButton={false}
+              render={<a href={file.downloadUrl} download />}
+            >
+              <DownloadIcon />
+              <span className="sr-only">Download file</span>
+            </Button>
+          ) : null}
+        </div>
+      );
+    },
+  },
   create_presentation: {
     description:
       "Create a real, downloadable PowerPoint (.pptx) file and open a slide preview in the canvas. Use this whenever the user asks for a PPT, PowerPoint, slide deck, or presentation.",
@@ -209,7 +310,7 @@ export default defineToolkit({
         return (
           <ToolCard
             title="Presentation"
-            body={`Creating ${args.slides?.length ?? 0} slides for ${args.title}`}
+            body={`Opening the editor and building ${args.slides?.length ?? 0} slides for ${args.title}`}
             tone="wait"
           />
         );
@@ -230,7 +331,12 @@ export default defineToolkit({
               </p>
             </div>
             {file?.downloadUrl ? (
-              <Button variant="outline" size="sm" render={<a href={file.downloadUrl} download />}>
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                render={<a href={file.downloadUrl} download />}
+              >
                 <DownloadIcon />
                 Download
               </Button>
@@ -241,6 +347,7 @@ export default defineToolkit({
     },
   },
   generate_image: {
+    display: "standalone",
     parameters: z.object({
       prompt: z.string().optional(),
       size: z.string().optional(),
@@ -261,6 +368,7 @@ export default defineToolkit({
     },
   },
   edit_image: {
+    display: "standalone",
     parameters: z.object({
       prompt: z.string().optional(),
       size: z.string().optional(),

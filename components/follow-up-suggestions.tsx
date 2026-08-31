@@ -54,8 +54,8 @@ const FollowupSuggestionsRow: FC = () => {
             key={idx}
             className="aui-thread-followup-suggestion bg-background hover:bg-muted/80 rounded-full border px-3 py-1 text-sm whitespace-nowrap transition-colors ease-in"
             prompt={suggestion.prompt}
-            method="replace"
-            autoSend
+            clearComposer
+            send
           >
             {suggestion.title ?? suggestion.prompt}
             {suggestion.label && (

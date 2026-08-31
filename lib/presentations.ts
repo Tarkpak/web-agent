@@ -79,11 +79,9 @@ export async function writePresentation({
   pptx.subject = title;
   pptx.title = title;
   pptx.company = "Agent Shell";
-  pptx.lang = "zh-CN";
   pptx.theme = {
     headFontFace: "Aptos Display",
     bodyFontFace: "Aptos",
-    lang: "zh-CN",
   };
   pptx.defineSlideMaster({
     title: "AGENT_SHELL",
@@ -203,7 +201,7 @@ export async function writePresentation({
         fontFace: "Aptos",
         fontSize: 18,
         color: colors.muted,
-        valign: "mid",
+        valign: "middle",
         margin: 0.04,
         breakLine: false,
         fit: "shrink",
@@ -230,7 +228,7 @@ export async function writePresentation({
         fontSize: 18,
         color: colors.foreground,
         breakLine: false,
-        valign: "mid",
+        valign: "middle",
         margin: 0.08,
         fit: "shrink",
       });

@@ -15,7 +15,6 @@ function MarkdownTextImpl() {
       className="aui-md"
       plugins={streamdownPlugins}
       shikiTheme={["github-light", "github-dark"]}
-      caret="circle"
       animated
       smooth
       defer

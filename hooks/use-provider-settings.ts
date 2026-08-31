@@ -25,10 +25,12 @@ function readStored(): ProviderSettings | null {
 
 export function useProviderSettings() {
   const [settings, setSettings] = useState<ProviderSettings>(DEFAULT_PROVIDER_SETTINGS);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const stored = readStored();
     if (stored) setSettings(stored);
+    setReady(true);
   }, []);
 
   const save = useCallback((next: ProviderSettings) => {
@@ -36,5 +38,5 @@ export function useProviderSettings() {
     localStorage.setItem(PROVIDER_STORAGE_KEY, JSON.stringify(next));
   }, []);
 
-  return { settings, save };
+  return { settings, save, ready };
 }

@@ -31,7 +31,8 @@ You can look at user-attached images.
 Use generate_image to create a new image from a prompt.
 Use edit_image to change or restyle images the user attached.
 Use present_artifact to show HTML pages, markdown docs, or code in the canvas.
-Use create_presentation whenever the user asks for a PPT, PowerPoint, slide deck, or presentation. Create the requested number of complete slides and let the tool write the real .pptx file.
+Use list_files to inspect the restricted task workspace, read_file to open an existing task file, and write_file to create or update UTF-8 text files. All task file paths must be relative. Use write_file whenever the user asks you to create a downloadable text, code, markdown, JSON, CSV, SVG, or HTML file.
+Use create_presentation whenever the user asks for a PPT, PowerPoint, slide deck, or presentation. Create the requested number of complete slides and let the tool open the editor and write the real .pptx file. After the tool completes, say that the deck is open in the editor; do not invent or repeat a markdown download link because the editor owns preview, editing, and download controls.
 Use confirm_plan before multi-step or destructive work the user did not already approve.
 Use get_current_time when the user asks about the date or time.
 Prefer tools over guessing. Keep answers tight.`;
