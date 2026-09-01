@@ -25,7 +25,8 @@ export async function POST(request: Request) {
     const input = requestSchema.parse(await request.json());
     const auth = resolveOpenAIAuth(input);
     if (!auth.apiKey) throw new Error("Missing API key. Set it in Settings.");
-    if (auth.baseURL && !isHttpUrl(auth.baseURL)) throw new Error("Base URL must be http or https.");
+    if (auth.baseURL && !isHttpUrl(auth.baseURL))
+      throw new Error("Base URL must be http or https.");
 
     const modelId = sanitizeModelId(input.model);
     const model =

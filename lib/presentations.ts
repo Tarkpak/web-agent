@@ -9,7 +9,10 @@ import type {
   PresentationSlide,
   PresentationTable,
 } from "@/lib/artifacts";
-import { resolvePresentationTemplate, type PresentationTemplate } from "@/lib/presentation-templates";
+import {
+  resolvePresentationTemplate,
+  type PresentationTemplate,
+} from "@/lib/presentation-templates";
 
 export type PresentationTheme = "tech" | "light" | "dark";
 
@@ -123,7 +126,12 @@ type ImageElement = {
   templateId: string;
 };
 
-export type PresentationElement = TextElement | ShapeElement | ChartElement | TableElement | ImageElement;
+export type PresentationElement =
+  | TextElement
+  | ShapeElement
+  | ChartElement
+  | TableElement
+  | ImageElement;
 
 export type PresentationSlideIR = {
   width: typeof SLIDE_WIDTH;
@@ -197,14 +205,24 @@ function textCapacity(element: TextElement) {
 }
 
 export function buildPresentationSlide(input: BuildSlideInput): PresentationSlideIR {
-  const { deckTitle, deckSubtitle, theme = "tech", design, brand, masterProfile, slide, index } = input;
+  const {
+    deckTitle,
+    deckSubtitle,
+    theme = "tech",
+    design,
+    brand,
+    masterProfile,
+    slide,
+    index,
+  } = input;
   const fallback = THEMES[theme] ?? THEMES.tech;
   const colors = {
     ...fallback,
     ...design,
     ...Object.fromEntries(
-      Object.entries(brand ?? {}).filter(([key, value]) =>
-        ["background", "foreground", "muted", "accent", "secondary"].includes(key) && value,
+      Object.entries(brand ?? {}).filter(
+        ([key, value]) =>
+          ["background", "foreground", "muted", "accent", "secondary"].includes(key) && value,
       ),
     ),
   } as typeof fallback;
@@ -247,11 +265,16 @@ export function buildPresentationSlide(input: BuildSlideInput): PresentationSlid
       }
     }
   }
-  const bounds = (slot: string, fallbackBounds: { x: number; y: number; width: number; height: number }) =>
-    template.slots[slot]?.bounds ?? fallbackBounds;
+  const bounds = (
+    slot: string,
+    fallbackBounds: { x: number; y: number; width: number; height: number },
+  ) => template.slots[slot]?.bounds ?? fallbackBounds;
 
   const addText = (
-    options: Omit<TextElement, "kind" | "fontFamily" | "height"> & { height?: number; role?: "title" | "body" },
+    options: Omit<TextElement, "kind" | "fontFamily" | "height"> & {
+      height?: number;
+      role?: "title" | "body";
+    },
   ) => {
     const { role = "body", ...textOptions } = options;
     elements.push({
@@ -694,7 +717,10 @@ export function buildPresentationSlide(input: BuildSlideInput): PresentationSlid
     title: { characters: textLength(slide.title) },
     subtitle: { characters: textLength(slide.subtitle ?? "") },
     body: { characters: textLength(slide.body ?? "") },
-    bullets: { characters: textLength((slide.bullets ?? []).join("")), items: slide.bullets?.length ?? 0 },
+    bullets: {
+      characters: textLength((slide.bullets ?? []).join("")),
+      items: slide.bullets?.length ?? 0,
+    },
     chart: { items: slide.chart?.categories.length ?? 0 },
     table: { items: slide.table?.rows.length ?? 0 },
   };
@@ -763,7 +789,11 @@ export function validatePresentationSlide(ir: PresentationSlideIR, slideIndex: n
           message: "Pie charts require exactly one series.",
         });
       }
-      if (element.data.series.some((series) => series.values.length !== element.data.categories.length)) {
+      if (
+        element.data.series.some(
+          (series) => series.values.length !== element.data.categories.length,
+        )
+      ) {
         issues.push({
           slide: slideIndex + 1,
           severity: "error",
@@ -831,7 +861,10 @@ export function renderPresentationSlide(input: BuildSlideInput) {
       const categoryWidth = plotWidth / element.data.categories.length;
       const seriesWidth = Math.max(8, (categoryWidth * 0.72) / element.data.series.length);
       const grid = [0, 0.25, 0.5, 0.75, 1]
-        .map((ratio) => `<line x1="${plotX}" y1="${plotY + plotHeight * ratio}" x2="${plotX + plotWidth}" y2="${plotY + plotHeight * ratio}" stroke="${element.muted}" opacity="0.2"/>`)
+        .map(
+          (ratio) =>
+            `<line x1="${plotX}" y1="${plotY + plotHeight * ratio}" x2="${plotX + plotWidth}" y2="${plotY + plotHeight * ratio}" stroke="${element.muted}" opacity="0.2"/>`,
+        )
         .join("");
       if (element.data.type === "pie") {
         const series = element.data.series[0];
@@ -862,16 +895,23 @@ export function renderPresentationSlide(input: BuildSlideInput) {
           element.data.type === "line"
             ? `<polyline points="${series.values.map((value, valueIndex) => `${plotX + valueIndex * categoryWidth + categoryWidth / 2},${plotY + plotHeight - (Math.abs(value) / max) * plotHeight}`).join(" ")}" fill="none" stroke="${element.colors[seriesIndex % element.colors.length]}" stroke-width="4"/>${series.values.map((value, valueIndex) => `<circle cx="${plotX + valueIndex * categoryWidth + categoryWidth / 2}" cy="${plotY + plotHeight - (Math.abs(value) / max) * plotHeight}" r="7" fill="${element.colors[seriesIndex % element.colors.length]}"/>`).join("")}`
             : series.values
-              .map((value, valueIndex) => {
-              const x = plotX + valueIndex * categoryWidth + categoryWidth * 0.14 + seriesIndex * seriesWidth;
-              const height = (Math.abs(value) / max) * plotHeight;
-              return `<rect x="${x}" y="${plotY + plotHeight - height}" width="${seriesWidth - 3}" height="${height}" fill="${element.colors[seriesIndex % element.colors.length]}"/>`;
-            })
-            .join(""),
+                .map((value, valueIndex) => {
+                  const x =
+                    plotX +
+                    valueIndex * categoryWidth +
+                    categoryWidth * 0.14 +
+                    seriesIndex * seriesWidth;
+                  const height = (Math.abs(value) / max) * plotHeight;
+                  return `<rect x="${x}" y="${plotY + plotHeight - height}" width="${seriesWidth - 3}" height="${height}" fill="${element.colors[seriesIndex % element.colors.length]}"/>`;
+                })
+                .join(""),
         )
         .join("");
       const labels = element.data.categories
-        .map((label, labelIndex) => `<text x="${plotX + labelIndex * categoryWidth + categoryWidth / 2}" y="${plotY + plotHeight + 35}" text-anchor="middle" fill="${element.foreground}" font-family="Aptos, 'Microsoft YaHei', sans-serif" font-size="18">${escapeXml(label)}</text>`)
+        .map(
+          (label, labelIndex) =>
+            `<text x="${plotX + labelIndex * categoryWidth + categoryWidth / 2}" y="${plotY + plotHeight + 35}" text-anchor="middle" fill="${element.foreground}" font-family="Aptos, 'Microsoft YaHei', sans-serif" font-size="18">${escapeXml(label)}</text>`,
+        )
         .join("");
       return `<g>${grid}${marks}${labels}</g>`;
     }
@@ -936,12 +976,24 @@ function addNativeElement(pptx: PptxGenJS, slide: PptxGenJS.Slide, element: Pres
     return;
   }
   if (element.kind === "chart") {
-    const chartType = element.data.type === "bar" ? pptx.ChartType.bar : element.data.type === "pie" ? pptx.ChartType.pie : pptx.ChartType.line;
+    const chartType =
+      element.data.type === "bar"
+        ? pptx.ChartType.bar
+        : element.data.type === "pie"
+          ? pptx.ChartType.pie
+          : pptx.ChartType.line;
     slide.addChart(
       chartType,
-      element.data.series.map((series) => ({ name: series.name, labels: element.data.categories, values: series.values })),
+      element.data.series.map((series) => ({
+        name: series.name,
+        labels: element.data.categories,
+        values: series.values,
+      })),
       {
-        x: toPptX(element.x), y: toPptY(element.y), w: toPptX(element.width), h: toPptY(element.height),
+        x: toPptX(element.x),
+        y: toPptY(element.y),
+        w: toPptX(element.width),
+        h: toPptY(element.height),
         showLegend: element.data.series.length > 1,
         showTitle: false,
         chartColors: element.colors.map(hex),
@@ -963,16 +1015,25 @@ function addNativeElement(pptx: PptxGenJS, slide: PptxGenJS.Slide, element: Pres
         options: {
           bold: rowIndex === 0,
           color: hex(element.foreground),
-          fill: { color: hex(rowIndex === 0 ? element.headerColor : element.muted), transparency: rowIndex === 0 ? 10 : rowIndex % 2 ? 92 : 86 },
+          fill: {
+            color: hex(rowIndex === 0 ? element.headerColor : element.muted),
+            transparency: rowIndex === 0 ? 10 : rowIndex % 2 ? 92 : 86,
+          },
           margin: 0.08,
           valign: "middle" as const,
         },
       })),
     );
     slide.addTable(rows, {
-      x: toPptX(element.x), y: toPptY(element.y), w: toPptX(element.width), h: toPptY(element.height),
+      x: toPptX(element.x),
+      y: toPptY(element.y),
+      w: toPptX(element.width),
+      h: toPptY(element.height),
       border: { type: "solid", color: hex(element.muted), pt: 0.5 },
-      fontFace: "Aptos", fontSize: 14, color: hex(element.foreground), margin: 0.08,
+      fontFace: "Aptos",
+      fontSize: 14,
+      color: hex(element.foreground),
+      margin: 0.08,
       rowH: toPptY(element.height) / Math.max(rows.length, 1),
     });
     return;

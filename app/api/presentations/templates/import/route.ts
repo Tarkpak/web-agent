@@ -17,7 +17,8 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(result);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not import the PowerPoint template.";
+    const message =
+      error instanceof Error ? error.message : "Could not import the PowerPoint template.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

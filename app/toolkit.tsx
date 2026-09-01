@@ -1,9 +1,22 @@
 "use generative";
 
-import { Image } from "@/components/image";
-import { Button } from "@/components/ui/button";
+import { ImageGeneration } from "@/components/assistant-ui/elements/image-generation";
+import { ApprovalCard } from "@/components/assistant-ui/elements/approval-card";
+import { ArtifactCard } from "@/components/assistant-ui/elements/artifact-card";
+import { FileCard } from "@/components/assistant-ui/elements/file-card";
+import { buildFileTree, FileTree } from "@/components/assistant-ui/elements/file-tree";
+import { JobProgress, type JobStage } from "@/components/assistant-ui/elements/job-progress";
+import { TerminalBlock } from "@/components/assistant-ui/elements/terminal-block";
+import { ToolError } from "@/components/assistant-ui/elements/tool-error";
+import { WebSearch, type WebSearchResult } from "@/components/assistant-ui/elements/web-search";
+import { ComparisonCard } from "@/components/assistant-ui/elements/comparison-card";
+import {
+  RecommendationChoices,
+  type VisualDirection,
+} from "@/components/assistant-ui/elements/recommendation-card";
+import { GenerationLoader } from "@/components/assistant-ui/elements/loading-state";
+import { Image } from "@/components/assistant-ui/elements/image";
 import { defineToolkit, externalTool, humanTool, stubTool } from "@assistant-ui/react";
-import { CheckIcon, DownloadIcon, FilePenLineIcon, FileSlidersIcon, FolderOpenIcon, SparklesIcon } from "lucide-react";
 import { z } from "zod";
 
 function ToolCard({
@@ -35,17 +48,19 @@ function GeneratedImage({
   alt,
   dataUrl,
   generating = false,
+  error,
 }: {
   alt: string;
   dataUrl?: string;
   generating?: boolean;
+  error?: string;
 }) {
   if (generating) {
-    return (
-      <Image.Root className="my-2" size="lg">
-        <Image.Generating />
-      </Image.Root>
-    );
+    return <ImageGeneration className="my-2" prompt={alt} generating />;
+  }
+
+  if (error) {
+    return <ToolError name="Image generation" target={alt} message={error} />;
   }
 
   if (!dataUrl) {
@@ -71,21 +86,38 @@ export default defineToolkit({
     execute: externalTool(),
     render: ({ args, result, status }) => {
       const query = args.query ?? "the web";
-      if (status.type === "running") {
-        return <ToolCard title="Web search" body={`Searching ${query}`} tone="wait" />;
+      if (status.type === "incomplete" && status.reason === "error") {
+        return (
+          <ToolError
+            name="Web search"
+            target={query}
+            message={"error" in status ? String(status.error || "Search failed") : "Search failed"}
+          />
+        );
       }
-      const sources =
-        result && typeof result === "object" && "sources" in result
-          ? (result.sources as Array<{ url?: string }>)
+      const record =
+        result && typeof result === "object" ? (result as Record<string, unknown>) : {};
+      const raw = Array.isArray(record.results)
+        ? record.results
+        : Array.isArray(record.sources)
+          ? record.sources
           : [];
-      const count = Array.isArray(sources) ? sources.length : 0;
-      return (
-        <ToolCard
-          title="Web search"
-          body={count > 0 ? `Found ${count} sources for ${query}` : `Finished search for ${query}`}
-          tone="ok"
-        />
-      );
+      const results = raw.flatMap<WebSearchResult>((item) => {
+        if (!item || typeof item !== "object") return [];
+        const source = item as Record<string, unknown>;
+        const url = typeof source.url === "string" ? source.url : undefined;
+        let domain = typeof source.domain === "string" ? source.domain : "";
+        if (!domain && url) {
+          try {
+            domain = new URL(url).hostname.replace(/^www\./, "");
+          } catch {
+            domain = url;
+          }
+        }
+        const title = typeof source.title === "string" ? source.title : domain;
+        return domain ? [{ title, domain, url }] : [];
+      });
+      return <WebSearch query={query} results={results} searching={status.type === "running"} />;
     },
   },
   x_search: {
@@ -94,14 +126,10 @@ export default defineToolkit({
     }),
     execute: externalTool(),
     render: ({ args, status }) => (
-      <ToolCard
-        title="X search"
-        body={
-          status.type === "running"
-            ? `Searching X for ${args.query ?? "posts"}`
-            : `Finished X search for ${args.query ?? "posts"}`
-        }
-        tone={status.type === "running" ? "wait" : "ok"}
+      <WebSearch
+        query={`X: ${args.query ?? "posts"}`}
+        results={[]}
+        searching={status.type === "running"}
       />
     ),
   },
@@ -109,14 +137,28 @@ export default defineToolkit({
     parameters: z.object({}),
     execute: externalTool(),
     render: ({ result, status }) => {
-      if (status.type === "running") {
-        return <ToolCard title="Code" body="Running code" tone="wait" />;
-      }
       const output =
         result && typeof result === "object" && "output" in result
           ? String((result as { output: string }).output)
-          : "Done";
-      return <ToolCard title="Code" body={output.slice(0, 800)} tone="ok" />;
+          : "";
+      if (status.type === "incomplete") {
+        return (
+          <ToolError
+            name="Code execution"
+            target="Provider sandbox"
+            message="Code execution failed."
+          />
+        );
+      }
+      const lines = output ? output.split("\n") : [];
+      return (
+        <TerminalBlock
+          command="Provider code sandbox"
+          lines={lines}
+          visibleCount={lines.length}
+          done={status.type !== "running"}
+        />
+      );
     },
   },
   get_current_time: {
@@ -141,15 +183,44 @@ export default defineToolkit({
         return { iso: now.toISOString(), timezone: "UTC", formatted: now.toISOString() };
       }
     },
-    render: ({ result, status }) => (
-      <ToolCard
-        title="Time"
-        body={
-          status.type === "running" ? "Reading clock" : (result?.formatted ?? result?.iso ?? "Done")
-        }
-        tone={status.type === "running" ? "wait" : "ok"}
-      />
-    ),
+    render: ({ result, status }) =>
+      status.type === "running" ? (
+        <GenerationLoader label="Reading clock" active />
+      ) : (
+        <ToolCard title="Time" body={result?.formatted ?? result?.iso ?? "Done"} tone="ok" />
+      ),
+  },
+  compare_options: {
+    description:
+      "Compare two or three user-relevant options and clearly recommend one. Use when the user asks for a structured comparison or selection advice.",
+    parameters: z.object({
+      traitLabels: z.array(z.string()).min(1).max(8),
+      options: z
+        .array(
+          z.object({
+            id: z.string(),
+            name: z.string(),
+            headline: z.string(),
+            traits: z.array(z.union([z.string(), z.literal(false)])).max(8),
+          }),
+        )
+        .min(2)
+        .max(3),
+      recommendedId: z.string(),
+      reason: z.string(),
+    }),
+    execute: async (args) => args,
+    render: ({ args, status }) =>
+      status.type === "complete" ? (
+        <ComparisonCard
+          traitLabels={args.traitLabels}
+          options={args.options}
+          recommendedId={args.recommendedId}
+          reason={args.reason}
+        />
+      ) : (
+        <GenerationLoader label="Comparing options" active />
+      ),
   },
   present_artifact: {
     description:
@@ -162,14 +233,12 @@ export default defineToolkit({
     }),
     execute: stubTool(),
     render: ({ args, status }) => (
-      <ToolCard
-        title="Canvas"
-        body={
-          status.type === "running"
-            ? `Opening ${args.title}`
-            : `Opened ${args.title} (${args.kind})`
-        }
-        tone={status.type === "running" ? "wait" : "ok"}
+      <ArtifactCard
+        title={args.title ?? "Untitled artifact"}
+        meta={`${args.kind ?? "document"} · Opened in canvas`}
+        kind={args.kind === "code" || args.kind === "html" ? "code" : "document"}
+        words={(args.content ?? "").trim().split(/\s+/).filter(Boolean).length}
+        generating={status.type === "running"}
       />
     ),
   },
@@ -180,24 +249,12 @@ export default defineToolkit({
       path: z.string().optional().describe("Optional relative directory inside the task workspace"),
     }),
     execute: stubTool(),
-    render: ({ args, result, status }) => {
-      const files = (result as { files?: Array<{ path: string; size: number }> } | undefined)
-        ?.files;
+    render: ({ result, status }) => {
+      const files =
+        (result as { files?: Array<{ path: string; size: number }> } | undefined)?.files ?? [];
+      const nodes = buildFileTree(files);
       return (
-        <ToolCard
-          title="Task files"
-          body={
-            status.type === "running"
-              ? `Listing ${args.path || "workspace"}`
-              : files?.length
-                ? files
-                    .slice(0, 12)
-                    .map((file) => `${file.path} (${file.size} bytes)`)
-                    .join("\n")
-                : "No task files found"
-          }
-          tone={status.type === "running" ? "wait" : "ok"}
-        />
+        <FileTree nodes={nodes} visibleCount={nodes.length} loading={status.type === "running"} />
       );
     },
   },
@@ -212,28 +269,13 @@ export default defineToolkit({
     render: ({ args, result, status }) => {
       const file = result as { path?: string; size?: number; downloadUrl?: string } | undefined;
       return (
-        <div className="border-border/60 bg-card my-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm">
-          <FolderOpenIcon className="text-muted-foreground size-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium">{file?.path ?? args.path}</p>
-            <p className="text-muted-foreground text-xs">
-              {status.type === "running"
-                ? "Opening file"
-                : `${file?.size ?? 0} bytes · Opened in canvas`}
-            </p>
-          </div>
-          {file?.downloadUrl ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              nativeButton={false}
-              render={<a href={file.downloadUrl} download />}
-            >
-              <DownloadIcon />
-              <span className="sr-only">Download file</span>
-            </Button>
-          ) : null}
-        </div>
+        <FileCard
+          name={file?.path ?? args.path ?? "File"}
+          size={file?.size}
+          downloadUrl={file?.downloadUrl}
+          action="open"
+          loading={status.type === "running"}
+        />
       );
     },
   },
@@ -249,28 +291,13 @@ export default defineToolkit({
     render: ({ args, result, status }) => {
       const file = result as { path?: string; size?: number; downloadUrl?: string } | undefined;
       return (
-        <div className="border-border/60 bg-card my-2 flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm">
-          <FilePenLineIcon className="text-muted-foreground size-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium">{file?.path ?? args.path}</p>
-            <p className="text-muted-foreground text-xs">
-              {status.type === "running"
-                ? "Writing file"
-                : `${file?.size ?? 0} bytes · Saved and opened`}
-            </p>
-          </div>
-          {file?.downloadUrl ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              nativeButton={false}
-              render={<a href={file.downloadUrl} download />}
-            >
-              <DownloadIcon />
-              <span className="sr-only">Download file</span>
-            </Button>
-          ) : null}
-        </div>
+        <FileCard
+          name={file?.path ?? args.path ?? "File"}
+          size={file?.size}
+          downloadUrl={file?.downloadUrl}
+          action="write"
+          loading={status.type === "running"}
+        />
       );
     },
   },
@@ -278,61 +305,65 @@ export default defineToolkit({
     description:
       "Pause before creating a new presentation and let the user choose one of three AI-generated visual directions. Each direction must be tailored to this specific topic, audience, and purpose, and materially differ in palette, typography, composition, and density. Use this exactly once before create_presentation unless the user already supplied a clear visual direction or asked you to choose for them.",
     parameters: z.object({
-      designRead: z.string().describe("One concise sentence explaining the inferred audience, purpose, and visual need"),
-      options: z.array(z.object({
-        id: z.string(),
-        name: z.string().describe("Short evocative direction name, not a generic template label"),
-        mood: z.string().describe("Three or four plain-language mood words"),
-        rationale: z.string().describe("Why this direction fits the user's topic and audience"),
-        background: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-        foreground: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-        muted: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-        accent: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-        secondary: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-        typography: z.enum(["modern", "editorial", "technical", "friendly"]),
-        composition: z.enum(["bold", "editorial", "structured", "cinematic"]),
-        density: z.enum(["airy", "balanced", "dense"]),
-        recommended: z.boolean().optional(),
-      })).length(3),
+      designRead: z
+        .string()
+        .describe(
+          "One concise sentence explaining the inferred audience, purpose, and visual need",
+        ),
+      options: z
+        .array(
+          z.object({
+            id: z.string(),
+            name: z
+              .string()
+              .describe("Short evocative direction name, not a generic template label"),
+            mood: z.string().describe("Three or four plain-language mood words"),
+            rationale: z.string().describe("Why this direction fits the user's topic and audience"),
+            background: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+            foreground: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+            muted: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+            accent: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+            secondary: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+            typography: z.enum(["modern", "editorial", "technical", "friendly"]),
+            composition: z.enum(["bold", "editorial", "structured", "cinematic"]),
+            density: z.enum(["airy", "balanced", "dense"]),
+            recommended: z.boolean().optional(),
+          }),
+        )
+        .length(3),
     }),
     execute: humanTool(),
     render: ({ args, result, addResult }) => {
       const options = args.options ?? [];
-      const selected = result && typeof result === "object" && "selected" in result
-        ? String((result as { selected: string }).selected)
-        : null;
+      const selected =
+        result && typeof result === "object" && "selected" in result
+          ? String((result as { selected: string }).selected)
+          : null;
       if (selected) {
         const option = options.find((item) => item.id === selected);
-        return <ToolCard title="Visual direction" body={`Selected ${option?.name ?? selected}`} tone="ok" />;
+        return (
+          <ToolCard
+            title="Visual direction"
+            body={`Selected ${option?.name ?? selected}`}
+            tone="ok"
+          />
+        );
       }
       if (options.length < 3) {
-        return <ToolCard title="Visual direction" body="Analyzing the brief and composing three tailored directions" tone="wait" />;
+        return (
+          <ToolCard
+            title="Visual direction"
+            body="Analyzing the brief and composing three tailored directions"
+            tone="wait"
+          />
+        );
       }
       return (
-        <div className="border-border/60 bg-card my-3 overflow-hidden rounded-lg border">
-          <div className="border-b px-4 py-3">
-            <div className="flex items-center gap-2 text-sm font-semibold"><SparklesIcon className="size-4 text-primary" />Choose a look</div>
-            <p className="text-muted-foreground mt-1 text-xs leading-5">{args.designRead || "Three directions tailored to this presentation"}</p>
-          </div>
-          <div className="grid gap-2 p-3 lg:grid-cols-3">
-            {options.map((option) => (
-              <button key={option.id} type="button" onClick={() => addResult({ selected: option.id, design: option })} className="group overflow-hidden rounded-md border text-left transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:border-foreground/30 hover:shadow-md active:translate-y-0">
-                <div className="relative aspect-[16/7] overflow-hidden p-3" style={{ backgroundColor: option.background, color: option.foreground }}>
-                  <div className="h-1 w-10" style={{ backgroundColor: option.accent }} />
-                  <div className="mt-5 max-w-[80%] text-base font-semibold leading-tight">{option.name}</div>
-                  <div className="absolute right-3 bottom-3 flex gap-1">
-                    {[option.foreground, option.muted, option.accent, option.secondary].map((color, colorIndex) => <span key={`${color}-${colorIndex}`} className="size-3 rounded-full outline outline-black/10" style={{ backgroundColor: color }} />)}
-                  </div>
-                </div>
-                <div className="p-3">
-                  <div className="flex items-center justify-between gap-2"><span className="text-sm font-medium">{option.name}</span>{option.recommended ? <span className="flex items-center gap-1 text-[10px] text-emerald-600"><CheckIcon className="size-3" />Best fit</span> : null}</div>
-                  <p className="text-muted-foreground mt-1 text-[11px]">{option.mood}</p>
-                  <p className="mt-2 line-clamp-3 text-xs leading-5">{option.rationale}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
+        <RecommendationChoices
+          detail={args.designRead || "Three directions tailored to this presentation"}
+          options={options as VisualDirection[]}
+          onSelect={(option) => addResult({ selected: option.id, design: option })}
+        />
       );
     },
   },
@@ -346,29 +377,52 @@ export default defineToolkit({
         .enum(["tech", "light", "dark"])
         .optional()
         .describe("Visual theme; use tech for technology topics"),
-      design: z.object({
-        name: z.string(), mood: z.string(), rationale: z.string(),
-        background: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-        foreground: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-        muted: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-        accent: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-        secondary: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-        typography: z.enum(["modern", "editorial", "technical", "friendly"]),
-        composition: z.enum(["bold", "editorial", "structured", "cinematic"]),
-        density: z.enum(["airy", "balanced", "dense"]),
-      }).optional().describe("The exact visual direction selected by the user"),
-      brand: z.object({
-        name: z.string().optional(),
-        logoText: z.string().optional(),
-        titleFont: z.string().optional(),
-        bodyFont: z.string().optional(),
-        footer: z.string().optional(),
-        background: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-        foreground: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-        muted: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-        accent: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-        secondary: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-      }).optional().describe("Brand settings explicitly supplied by the user"),
+      design: z
+        .object({
+          name: z.string(),
+          mood: z.string(),
+          rationale: z.string(),
+          background: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+          foreground: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+          muted: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+          accent: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+          secondary: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+          typography: z.enum(["modern", "editorial", "technical", "friendly"]),
+          composition: z.enum(["bold", "editorial", "structured", "cinematic"]),
+          density: z.enum(["airy", "balanced", "dense"]),
+        })
+        .optional()
+        .describe("The exact visual direction selected by the user"),
+      brand: z
+        .object({
+          name: z.string().optional(),
+          logoText: z.string().optional(),
+          titleFont: z.string().optional(),
+          bodyFont: z.string().optional(),
+          footer: z.string().optional(),
+          background: z
+            .string()
+            .regex(/^#[0-9A-Fa-f]{6}$/)
+            .optional(),
+          foreground: z
+            .string()
+            .regex(/^#[0-9A-Fa-f]{6}$/)
+            .optional(),
+          muted: z
+            .string()
+            .regex(/^#[0-9A-Fa-f]{6}$/)
+            .optional(),
+          accent: z
+            .string()
+            .regex(/^#[0-9A-Fa-f]{6}$/)
+            .optional(),
+          secondary: z
+            .string()
+            .regex(/^#[0-9A-Fa-f]{6}$/)
+            .optional(),
+        })
+        .optional()
+        .describe("Brand settings explicitly supplied by the user"),
       slides: z
         .array(
           z.object({
@@ -379,17 +433,55 @@ export default defineToolkit({
               .array(z.string())
               .optional()
               .describe("Up to five concise audience-facing bullet points"),
-            layout: z.enum(["cover", "statement", "split", "list", "comparison", "timeline", "quote", "closing", "chart", "table"]).optional().describe("Optional layout hint; the orchestrator validates semantic fit and capacity"),
-            templateId: z.enum(["cover-accent-rail", "statement-focus", "split-narrative-list", "numbered-list", "two-column-comparison", "milestone-timeline", "editorial-quote", "closing-halo", "data-chart", "data-table"]).optional(),
-            chart: z.object({
-              type: z.enum(["bar", "line", "pie"]),
-              categories: z.array(z.string()).min(1).max(12),
-              series: z.array(z.object({ name: z.string(), values: z.array(z.number()).min(1).max(12) })).min(1).max(6),
-            }).optional().describe("Traceable chart data supplied by the user"),
-            table: z.object({
-              headers: z.array(z.string()).min(1).max(6),
-              rows: z.array(z.array(z.string()).max(6)).max(8),
-            }).optional().describe("Traceable tabular data supplied by the user"),
+            layout: z
+              .enum([
+                "cover",
+                "statement",
+                "split",
+                "list",
+                "comparison",
+                "timeline",
+                "quote",
+                "closing",
+                "chart",
+                "table",
+              ])
+              .optional()
+              .describe(
+                "Optional layout hint; the orchestrator validates semantic fit and capacity",
+              ),
+            templateId: z
+              .enum([
+                "cover-accent-rail",
+                "statement-focus",
+                "split-narrative-list",
+                "numbered-list",
+                "two-column-comparison",
+                "milestone-timeline",
+                "editorial-quote",
+                "closing-halo",
+                "data-chart",
+                "data-table",
+              ])
+              .optional(),
+            chart: z
+              .object({
+                type: z.enum(["bar", "line", "pie"]),
+                categories: z.array(z.string()).min(1).max(12),
+                series: z
+                  .array(z.object({ name: z.string(), values: z.array(z.number()).min(1).max(12) }))
+                  .min(1)
+                  .max(6),
+              })
+              .optional()
+              .describe("Traceable chart data supplied by the user"),
+            table: z
+              .object({
+                headers: z.array(z.string()).min(1).max(6),
+                rows: z.array(z.array(z.string()).max(6)).max(8),
+              })
+              .optional()
+              .describe("Traceable tabular data supplied by the user"),
           }),
         )
         .min(1)
@@ -401,44 +493,41 @@ export default defineToolkit({
       const file = result as
         | { fileName?: string; downloadUrl?: string; slideCount?: number; error?: string }
         | undefined;
+      const stages: readonly JobStage[] = [
+        { name: "compose", weight: 2 },
+        { name: "layout", weight: 3 },
+        { name: "render", weight: 3 },
+        { name: "export", weight: 2 },
+      ];
 
       if (status.type === "running") {
         return (
-          <ToolCard
-            title="Presentation"
-            body={`Opening the editor and building ${args.slides?.length ?? 0} slides for ${args.title}`}
-            tone="wait"
+          <JobProgress
+            title={`Building ${args.title ?? "presentation"}`}
+            stages={stages}
+            stageIndex={0}
+            stageProgress={0}
+            eta={`${args.slides?.length ?? 0} slides`}
           />
         );
       }
 
-      if (file?.error) {
-        return <ToolCard title="Presentation" body={file.error} />;
+      if (file?.error || status.type === "incomplete") {
+        return (
+          <ToolError
+            name="Presentation"
+            target={args.title ?? "Presentation"}
+            message={file?.error ?? "Presentation generation failed."}
+          />
+        );
       }
 
       return (
-        <div className="border-border/60 bg-card my-2 rounded-lg border px-3 py-3 text-sm">
-          <div className="flex min-w-0 items-center gap-2">
-            <FileSlidersIcon className="text-muted-foreground size-4 shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">{file?.fileName ?? `${args.title}.pptx`}</p>
-              <p className="text-muted-foreground text-xs">
-                {file?.slideCount ?? args.slides?.length ?? 0} slides · PowerPoint
-              </p>
-            </div>
-            {file?.downloadUrl ? (
-              <Button
-                variant="outline"
-                size="sm"
-                nativeButton={false}
-                render={<a href={file.downloadUrl} download />}
-              >
-                <DownloadIcon />
-                Download
-              </Button>
-            ) : null}
-          </div>
-        </div>
+        <ArtifactCard
+          title={file?.fileName ?? `${args.title ?? "Presentation"}.pptx`}
+          meta={`${file?.slideCount ?? args.slides?.length ?? 0} slides · PowerPoint · Opened in canvas`}
+          kind="presentation"
+        />
       );
     },
   },
@@ -452,6 +541,18 @@ export default defineToolkit({
     render: ({ args, result, status }) => {
       if (status.type === "running") {
         return <GeneratedImage alt={args.prompt ?? "Generated image"} generating />;
+      }
+      if (status.type === "incomplete") {
+        return (
+          <GeneratedImage
+            alt={args.prompt ?? "Generated image"}
+            error={
+              status.reason === "content-filter"
+                ? "The provider blocked this image."
+                : "Image generation failed."
+            }
+          />
+        );
       }
       const dataUrl =
         result && typeof result === "object" && "dataUrl" in result
@@ -474,6 +575,18 @@ export default defineToolkit({
       if (status.type === "running") {
         return <GeneratedImage alt={args.prompt ?? "Edited image"} generating />;
       }
+      if (status.type === "incomplete") {
+        return (
+          <GeneratedImage
+            alt={args.prompt ?? "Edited image"}
+            error={
+              status.reason === "content-filter"
+                ? "The provider blocked this edit."
+                : "Image editing failed."
+            }
+          />
+        );
+      }
       const dataUrl =
         result && typeof result === "object" && "dataUrl" in result
           ? String((result as { dataUrl?: string }).dataUrl || "")
@@ -492,43 +605,25 @@ export default defineToolkit({
       steps: z.array(z.string()).describe("Ordered steps to approve"),
     }),
     execute: humanTool(),
-    render: ({ args, result, addResult }) => {
-      if (result) {
-        return (
-          <ToolCard
-            title="Plan"
-            body={
-              result.approved ? "Approved. Continuing." : "Rejected. Waiting for a new direction."
-            }
-            tone={result.approved ? "ok" : "idle"}
-          />
-        );
-      }
+    render: ({ args, result, addResult, status }) => {
+      const state = result
+        ? result.approved
+          ? "done"
+          : "denied"
+        : status.type === "requires-action"
+          ? "request"
+          : status.type === "running"
+            ? "preparing"
+            : "running";
       return (
-        <div className="border-border/60 bg-card my-2 rounded-xl border px-3 py-3 text-sm">
-          <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
-            Approve plan
-          </p>
-          <p className="mt-1 font-medium">{args.summary}</p>
-          <ol className="text-muted-foreground mt-2 list-decimal space-y-1 ps-5">
-            {args.steps?.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-          <div className="mt-3 flex gap-2">
-            <Button type="button" size="sm" onClick={() => addResult({ approved: true })}>
-              Approve
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => addResult({ approved: false })}
-            >
-              Reject
-            </Button>
-          </div>
-        </div>
+        <ApprovalCard
+          state={state}
+          title="Approve plan"
+          subtitle={args.summary ?? "Review the proposed steps before continuing."}
+          steps={args.steps ?? []}
+          onApprove={() => addResult({ approved: true })}
+          onDeny={() => addResult({ approved: false })}
+        />
       );
     },
   },

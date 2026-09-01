@@ -1,11 +1,14 @@
 "use client";
 
-import type { CatalogModel } from "@/lib/provider";
+import type { CatalogModel, ProviderKind, ReasoningEffort } from "@/lib/provider";
 import { createContext, useContext } from "react";
 
 export type ShellContextValue = {
   modelId: string;
   setModelId: (id: string) => void;
+  provider: ProviderKind;
+  reasoningEffort: ReasoningEffort;
+  setReasoningEffort: (effort: ReasoningEffort) => void;
   models: CatalogModel[];
   loading: boolean;
   error: string | null;

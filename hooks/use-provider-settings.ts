@@ -17,6 +17,20 @@ function readStored(): ProviderSettings | null {
       baseURL: typeof parsed.baseURL === "string" ? parsed.baseURL : "",
       apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
       model: typeof parsed.model === "string" ? parsed.model : "",
+      reasoningEffort:
+        parsed.reasoningEffort === "low" ||
+        parsed.reasoningEffort === "medium" ||
+        parsed.reasoningEffort === "high"
+          ? parsed.reasoningEffort
+          : "medium",
+      systemPrompt: typeof parsed.systemPrompt === "string" ? parsed.systemPrompt : "",
+      temperature:
+        typeof parsed.temperature === "number" && Number.isFinite(parsed.temperature)
+          ? Math.min(2, Math.max(0, parsed.temperature))
+          : 0.7,
+      webSearch: parsed.webSearch !== false,
+      codeExecution: parsed.codeExecution !== false,
+      imageGeneration: parsed.imageGeneration !== false,
     };
   } catch {
     return null;

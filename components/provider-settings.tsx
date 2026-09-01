@@ -1,6 +1,10 @@
 "use client";
 
-import type { ProviderSettings } from "@/lib/provider";
+import type { CatalogModel, ProviderSettings } from "@/lib/provider";
+import {
+  SettingsPanel,
+  type SettingToggle,
+} from "@/components/assistant-ui/elements/settings-panel";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,9 +33,11 @@ const PROVIDERS = [
 
 export function ProviderSettingsButton({
   settings,
+  models,
   onSave,
 }: {
   settings: ProviderSettings;
+  models: CatalogModel[];
   onSave: (next: ProviderSettings) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -63,7 +69,7 @@ export function ProviderSettingsButton({
               ...draft,
               baseURL: draft.baseURL.trim(),
               apiKey: draft.apiKey.trim(),
-              model: settings.model,
+              model: draft.model,
             });
             setOpen(false);
           }}
@@ -116,6 +122,45 @@ export function ProviderSettingsButton({
               placeholder="sk-..."
             />
           </label>
+
+          <SettingsPanel
+            model={draft.model}
+            models={models.filter((model) => model.kind !== "hidden")}
+            systemPrompt={draft.systemPrompt}
+            temperature={draft.temperature}
+            toggles={
+              [
+                {
+                  key: "webSearch",
+                  label: "Web search",
+                  detail: "Allow current web and X lookups",
+                  on: draft.webSearch,
+                },
+                {
+                  key: "codeExecution",
+                  label: "Code execution",
+                  detail: "Run calculations in the provider sandbox",
+                  on: draft.codeExecution,
+                },
+                {
+                  key: "imageGeneration",
+                  label: "Image generation",
+                  detail: "Create and edit images with image tools",
+                  on: draft.imageGeneration,
+                },
+              ] satisfies SettingToggle[]
+            }
+            onModelChange={(model) => setDraft({ ...draft, model })}
+            onSystemPromptChange={(systemPrompt) => setDraft({ ...draft, systemPrompt })}
+            onTemperatureChange={(temperature) => setDraft({ ...draft, temperature })}
+            onToggle={(key) => {
+              if (key === "webSearch") setDraft({ ...draft, webSearch: !draft.webSearch });
+              if (key === "codeExecution")
+                setDraft({ ...draft, codeExecution: !draft.codeExecution });
+              if (key === "imageGeneration")
+                setDraft({ ...draft, imageGeneration: !draft.imageGeneration });
+            }}
+          />
 
           <DialogFooter>
             <Button type="submit">Save</Button>

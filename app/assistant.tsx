@@ -3,19 +3,24 @@
 import { ArtifactCanvas } from "@/components/artifact-canvas";
 import { ProviderSettingsButton } from "@/components/provider-settings";
 import { ShellProvider } from "@/components/shell-context";
-import { Thread } from "@/components/thread";
-import { ThreadListSidebar } from "@/components/threadlist-sidebar";
+import { Thread, type ThreadComponents } from "@/components/assistant-ui/elements/thread";
+import { ThreadListSidebar } from "@/components/assistant-ui/elements/thread-list-sidebar";
+import { ConversationSearch } from "@/components/assistant-ui/elements/conversation-search";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { useProviderSettings } from "@/hooks/use-provider-settings";
 import { useRemoteModels } from "@/hooks/use-remote-models";
 import type { Artifact } from "@/lib/artifacts";
 import { TaskFileAttachmentAdapter } from "@/lib/task-file-attachment-adapter";
+import { serverFeedbackAdapter } from "@/lib/feedback-adapter";
+import { readAloudSpeechAdapter } from "@/lib/read-aloud-speech-adapter";
 import { AssistantChatTransport, useChatRuntime } from "@assistant-ui/ai-sdk";
 import {
   AssistantRuntimeProvider,
   Suggestions,
   Tools,
+  WebSpeechDictationAdapter,
+  type SpeechSynthesisAdapter,
   useAui,
   useAuiToolOverrides,
   useRemoteThreadListRuntime,
@@ -23,6 +28,8 @@ import {
 import { serverThreadListAdapter } from "@/lib/server-thread-list-adapter";
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SearchIcon } from "lucide-react";
+import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import toolkit from "./toolkit";
 
 const attachmentAdapter = new TaskFileAttachmentAdapter();
@@ -66,6 +73,8 @@ function AgentWelcome() {
     </div>
   );
 }
+
+const AGENT_THREAD_COMPONENTS: ThreadComponents = { Welcome: AgentWelcome };
 
 function ArtifactBridge({ onPresent }: { onPresent: (artifact: Artifact) => void }) {
   const runFileAction = async (
@@ -168,6 +177,20 @@ export const Assistant = () => {
   const { settings, save, ready } = useProviderSettings();
   const { models, loading, error, refresh } = useRemoteModels(settings, ready);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [voiceAdapters, setVoiceAdapters] = useState<{
+    speech?: SpeechSynthesisAdapter;
+    dictation?: WebSpeechDictationAdapter;
+  }>({});
+
+  useEffect(() => {
+    setVoiceAdapters({
+      speech: "speechSynthesis" in window ? readAloudSpeechAdapter : undefined,
+      dictation: WebSpeechDictationAdapter.isSupported()
+        ? new WebSpeechDictationAdapter({ continuous: true, interimResults: true })
+        : undefined,
+    });
+  }, []);
 
   useEffect(() => {
     if (models.length === 0) return;
@@ -214,6 +237,13 @@ export const Assistant = () => {
           imageModel: imageModelRef.current,
           baseURL: settingsRef.current.baseURL,
           apiKey: settingsRef.current.apiKey,
+          system: settingsRef.current.systemPrompt,
+          callSettings: { temperature: settingsRef.current.temperature },
+          capabilities: {
+            webSearch: settingsRef.current.webSearch,
+            codeExecution: settingsRef.current.codeExecution,
+            imageGeneration: settingsRef.current.imageGeneration,
+          },
         }),
       }),
     [],
@@ -225,7 +255,12 @@ export const Assistant = () => {
       useChatRuntime({
         sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
         transport,
-        adapters: { attachments: attachmentAdapter },
+        adapters: {
+          attachments: attachmentAdapter,
+          feedback: serverFeedbackAdapter,
+          speech: voiceAdapters.speech,
+          dictation: voiceAdapters.dictation,
+        },
       }),
   });
 
@@ -240,6 +275,9 @@ export const Assistant = () => {
         value={{
           modelId: settings.model,
           setModelId: (id) => save({ ...settings, model: id }),
+          provider: settings.provider,
+          reasoningEffort: settings.reasoningEffort,
+          setReasoningEffort: (reasoningEffort) => save({ ...settings, reasoningEffort }),
           models,
           loading,
           error,
@@ -262,12 +300,26 @@ export const Assistant = () => {
                       {error ? " · models unavailable" : ""}
                     </p>
                   </div>
-                  <ProviderSettingsButton settings={settings} onSave={save} />
+                  <div className="flex items-center gap-1">
+                    <TooltipIconButton
+                      tooltip="Find in conversation"
+                      onClick={() => setSearchOpen((value) => !value)}
+                      aria-pressed={searchOpen}
+                    >
+                      <SearchIcon className="size-4" />
+                    </TooltipIconButton>
+                    <ProviderSettingsButton settings={settings} models={models} onSave={save} />
+                  </div>
                 </div>
               </header>
+              {searchOpen && (
+                <div className="border-b p-2">
+                  <ConversationSearch onClose={() => setSearchOpen(false)} />
+                </div>
+              )}
               <div className="flex min-h-0 flex-1">
                 <div className="min-w-0 flex-1 overflow-hidden">
-                  <Thread components={{ Welcome: AgentWelcome }} />
+                  <Thread components={AGENT_THREAD_COMPONENTS} />
                 </div>
                 {artifact ? (
                   <ArtifactCanvas artifact={artifact} onClose={() => setArtifact(null)} />

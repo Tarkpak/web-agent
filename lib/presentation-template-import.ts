@@ -148,7 +148,11 @@ function geometry(node: XmlNode, sourceWidth: number, sourceHeight: number) {
 function collectText(node: XmlNode) {
   const body = record(node.txBody);
   return records(body?.p)
-    .flatMap((paragraph) => records(paragraph.r).map((run) => textValue(run.t)).concat(textValue(paragraph.fld)))
+    .flatMap((paragraph) =>
+      records(paragraph.r)
+        .map((run) => textValue(run.t))
+        .concat(textValue(paragraph.fld)),
+    )
     .filter(Boolean)
     .join(" ");
 }
@@ -195,7 +199,12 @@ function masterShapes(
         color: resolveColor(runProperties?.solidFill, colors, colors.get("tx1") ?? "#111827"),
         fontFamily: attr(record(runProperties?.latin), "typeface") || fonts.minor || "Aptos",
         weight: attr(runProperties, "b") === "1" ? 700 : 400,
-        align: attr(record(paragraph?.pPr), "algn") === "ctr" ? "center" : attr(record(paragraph?.pPr), "algn") === "r" ? "right" : "left",
+        align:
+          attr(record(paragraph?.pPr), "algn") === "ctr"
+            ? "center"
+            : attr(record(paragraph?.pPr), "algn") === "r"
+              ? "right"
+              : "left",
       });
       continue;
     }
@@ -204,7 +213,12 @@ function masterShapes(
     if (preset === "ellipse") decorations.push({ kind: "ellipse", ...frame, color });
     else if (preset === "line") {
       const line = record(properties?.ln);
-      decorations.push({ kind: "line", ...frame, color: resolveColor(line?.solidFill, colors, color), lineWidth: Math.max(1, Number(attr(line, "w") ?? 12700) / 12700) });
+      decorations.push({
+        kind: "line",
+        ...frame,
+        color: resolveColor(line?.solidFill, colors, color),
+        lineWidth: Math.max(1, Number(attr(line, "w") ?? 12700) / 12700),
+      });
     } else if (properties?.solidFill) decorations.push({ kind: "rect", ...frame, color });
   }
   return decorations;
@@ -216,8 +230,10 @@ export async function importPresentationTemplate(options: {
   outputRoot: string;
 }) {
   const { buffer, sourceName, outputRoot } = options;
-  if (!sourceName.toLowerCase().endsWith(".pptx")) throw new Error("Choose a .pptx PowerPoint file.");
-  if (buffer.byteLength > 10 * 1024 * 1024) throw new Error("PowerPoint templates are limited to 10 MB.");
+  if (!sourceName.toLowerCase().endsWith(".pptx"))
+    throw new Error("Choose a .pptx PowerPoint file.");
+  if (buffer.byteLength > 10 * 1024 * 1024)
+    throw new Error("PowerPoint templates are limited to 10 MB.");
   let zip: JSZip;
   try {
     zip = await JSZip.loadAsync(buffer, { checkCRC32: true, createFolders: false });
@@ -225,12 +241,14 @@ export async function importPresentationTemplate(options: {
     throw new Error("This file is not a valid PowerPoint OOXML package.");
   }
   const entries = Object.values(zip.files).filter((entry) => !entry.dir);
-  if (entries.length > MAX_ENTRIES) throw new Error("The PowerPoint package contains too many files.");
+  if (entries.length > MAX_ENTRIES)
+    throw new Error("The PowerPoint package contains too many files.");
   let totalSize = 0;
   for (const entry of entries) {
     normalizeZipPath(entry.name);
     totalSize += zipSize(entry);
-    if (totalSize > MAX_UNCOMPRESSED_BYTES) throw new Error("The expanded PowerPoint package is too large.");
+    if (totalSize > MAX_UNCOMPRESSED_BYTES)
+      throw new Error("The expanded PowerPoint package is too large.");
   }
   if (!zip.file("[Content_Types].xml") || !zip.file("ppt/presentation.xml")) {
     throw new Error("This file is not a valid PowerPoint OOXML package.");
@@ -245,7 +263,8 @@ export async function importPresentationTemplate(options: {
   const size = record(record(presentation.presentation)?.sldSz);
   const sourceWidth = Number(attr(size, "cx") ?? 12192000);
   const sourceHeight = Number(attr(size, "cy") ?? 6858000);
-  if (!(sourceWidth > 0 && sourceHeight > 0)) throw new Error("The PowerPoint slide size is invalid.");
+  if (!(sourceWidth > 0 && sourceHeight > 0))
+    throw new Error("The PowerPoint slide size is invalid.");
 
   const themeEntry = entries.find((entry) => /^ppt\/theme\/theme\d+\.xml$/i.test(entry.name));
   const theme: {
@@ -255,27 +274,51 @@ export async function importPresentationTemplate(options: {
     ? parseTheme(await readXml(zip, themeEntry.name))
     : { colors: new Map<string, string>(), fonts: {} };
   const warnings: string[] = [];
-  if (!themeEntry) warnings.push("No theme definition was found; default colors and fonts will be used.");
+  if (!themeEntry)
+    warnings.push("No theme definition was found; default colors and fonts will be used.");
 
-  const masterEntries = entries.filter((entry) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/i.test(entry.name));
-  const layoutEntries = entries.filter((entry) => /^ppt\/slideLayouts\/slideLayout\d+\.xml$/i.test(entry.name));
+  const masterEntries = entries.filter((entry) =>
+    /^ppt\/slideMasters\/slideMaster\d+\.xml$/i.test(entry.name),
+  );
+  const layoutEntries = entries.filter((entry) =>
+    /^ppt\/slideLayouts\/slideLayout\d+\.xml$/i.test(entry.name),
+  );
   if (!masterEntries.length) throw new Error("The PowerPoint does not contain a slide master.");
-  const masters = await Promise.all(masterEntries.map(async (entry) => ({ entry, xml: await readXml(zip, entry.name) })));
+  const masters = await Promise.all(
+    masterEntries.map(async (entry) => ({ entry, xml: await readXml(zip, entry.name) })),
+  );
   const layouts = await Promise.all(layoutEntries.map((entry) => readXml(zip, entry.name)));
-  const masterNames = masters.map(({ xml }, index) => attr(record(record(xml.sldMaster)?.cSld), "name") || `Master ${index + 1}`);
-  const layoutNames = layouts.map((xml, index) => attr(record(record(xml.sldLayout)?.cSld), "name") || `Layout ${index + 1}`);
+  const masterNames = masters.map(
+    ({ xml }, index) => attr(record(record(xml.sldMaster)?.cSld), "name") || `Master ${index + 1}`,
+  );
+  const layoutNames = layouts.map(
+    (xml, index) => attr(record(record(xml.sldLayout)?.cSld), "name") || `Layout ${index + 1}`,
+  );
   const selectedLayoutIndex = layouts.reduce(
-    (selected, layout, index) => visibleObjectCount(layout) > visibleObjectCount(layouts[selected]) ? index : selected,
+    (selected, layout, index) =>
+      visibleObjectCount(layout) > visibleObjectCount(layouts[selected]) ? index : selected,
     0,
   );
   const selectedLayout = layouts[selectedLayoutIndex];
   const selectedLayoutEntry = layoutEntries[selectedLayoutIndex];
-  const decorations = masterShapes(masters[0].xml, theme.colors, theme.fonts, sourceWidth, sourceHeight);
+  const decorations = masterShapes(
+    masters[0].xml,
+    theme.colors,
+    theme.fonts,
+    sourceWidth,
+    sourceHeight,
+  );
   if (selectedLayout) {
-    decorations.push(...masterShapes(selectedLayout, theme.colors, theme.fonts, sourceWidth, sourceHeight));
+    decorations.push(
+      ...masterShapes(selectedLayout, theme.colors, theme.fonts, sourceWidth, sourceHeight),
+    );
   }
-  if (layoutNames.length > 1 && selectedLayout) warnings.push(`Applied master decorations from layout “${layoutNames[selectedLayoutIndex]}”.`);
-  if (masterEntries.length > 1) warnings.push(`Detected ${masterEntries.length} masters; decorations from the first master are applied.`);
+  if (layoutNames.length > 1 && selectedLayout)
+    warnings.push(`Applied master decorations from layout “${layoutNames[selectedLayoutIndex]}”.`);
+  if (masterEntries.length > 1)
+    warnings.push(
+      `Detected ${masterEntries.length} masters; decorations from the first master are applied.`,
+    );
 
   let assetCount = 0;
   const savedMedia = new Map<string, string>();
@@ -296,7 +339,9 @@ export async function importPresentationTemplate(options: {
       const media = mediaPath ? zip.file(mediaPath) : undefined;
       const extension = mediaPath?.split(".").pop()?.toLowerCase();
       if (!media || !extension || !MEDIA_TYPES.has(extension)) {
-        warnings.push("A master image used an unsupported or missing media format and was skipped.");
+        warnings.push(
+          "A master image used an unsupported or missing media format and was skipped.",
+        );
         continue;
       }
       if (zipSize(media) > MAX_MEDIA_BYTES) {
@@ -348,6 +393,10 @@ export async function importPresentationTemplate(options: {
     decorations,
     warnings,
   };
-  await writeFile(path.join(assetDirectory, "profile.json"), JSON.stringify(profile, null, 2), "utf8");
+  await writeFile(
+    path.join(assetDirectory, "profile.json"),
+    JSON.stringify(profile, null, 2),
+    "utf8",
+  );
   return { brand, profile };
 }

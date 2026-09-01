@@ -24,7 +24,8 @@ export async function GET(
     );
     return new Response(file, {
       headers: {
-        "Content-Type": MIME_TYPES[path.extname(assetId).toLowerCase()] ?? "application/octet-stream",
+        "Content-Type":
+          MIME_TYPES[path.extname(assetId).toLowerCase()] ?? "application/octet-stream",
         "Cache-Control": "private, max-age=31536000, immutable",
         "X-Content-Type-Options": "nosniff",
       },

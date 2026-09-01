@@ -4,10 +4,7 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-export async function GET(
-  _request: Request,
-  context: { params: Promise<{ fileName: string }> },
-) {
+export async function GET(_request: Request, context: { params: Promise<{ fileName: string }> }) {
   const { fileName } = await context.params;
   const decodedName = decodeURIComponent(fileName);
 
@@ -19,8 +16,7 @@ export async function GET(
     const file = await readFile(path.join(process.cwd(), "generated-files", decodedName));
     return new Response(file, {
       headers: {
-        "Content-Type":
-          "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(decodedName)}`,
         "Content-Length": String(file.byteLength),
         "Cache-Control": "private, max-age=31536000, immutable",

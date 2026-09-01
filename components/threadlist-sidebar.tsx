@@ -10,7 +10,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import { ThreadList } from "@/components/thread-list";
+import { ThreadList } from "@/components/assistant-ui/elements/thread-list";
 
 export function ThreadListSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (

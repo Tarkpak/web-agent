@@ -2,6 +2,7 @@
 
 import {
   ModelSelectorContent,
+  ModelSelectorEffort,
   ModelSelectorEmpty,
   ModelSelectorGroup,
   ModelSelectorItem,
@@ -11,15 +12,18 @@ import {
   ModelSelectorTrigger,
   ModelSelectorValue,
   type ModelOption,
-} from "@/components/model-selector";
+} from "@/components/assistant-ui/elements/model-selector";
 import { useOptionalShell } from "@/components/shell-context";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ImageIcon, RefreshCwIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useAui } from "@assistant-ui/react";
+import { supportsReasoningEffort, type ReasoningEffort } from "@/lib/provider";
+import { useEffect, useMemo } from "react";
 
 export function ComposerModelSelect() {
   const shell = useOptionalShell();
+  const aui = useAui();
   const models = useMemo<ModelOption[]>(
     () =>
       shell?.models.map((model) => ({
@@ -28,9 +32,31 @@ export function ComposerModelSelect() {
         description: model.ownedBy || undefined,
         keywords: model.ownedBy ? [model.ownedBy, model.kind] : [model.kind],
         icon: model.kind === "image" ? <ImageIcon /> : undefined,
+        efforts:
+          model.kind === "chat" && shell && supportsReasoningEffort(shell.provider, model.id)
+            ? true
+            : undefined,
       })) ?? [],
-    [shell?.models],
+    [shell],
   );
+
+  const modelId = shell?.modelId;
+  const reasoningEffort = shell?.reasoningEffort;
+  const activeReasoningEffort =
+    shell && modelId && supportsReasoningEffort(shell.provider, modelId)
+      ? reasoningEffort
+      : undefined;
+  useEffect(() => {
+    if (!modelId) return;
+    return aui.modelContext.register({
+      getModelContext: () => ({
+        config: {
+          modelName: modelId,
+          reasoningEffort: activeReasoningEffort,
+        },
+      }),
+    });
+  }, [activeReasoningEffort, aui, modelId]);
 
   if (!shell) return null;
 
@@ -41,7 +67,13 @@ export function ComposerModelSelect() {
   const imageModels = models.filter((model) => !chatModelIds.has(model.id));
 
   return (
-    <ModelSelectorRoot models={models} value={shell.modelId} onValueChange={shell.setModelId}>
+    <ModelSelectorRoot
+      models={models}
+      value={shell.modelId}
+      onValueChange={shell.setModelId}
+      effort={shell.reasoningEffort}
+      onEffortChange={(effort) => shell.setReasoningEffort(effort as ReasoningEffort)}
+    >
       <ModelSelectorTrigger
         variant="ghost"
         size="sm"
@@ -49,7 +81,6 @@ export function ComposerModelSelect() {
         aria-label="Select model"
       >
         <ModelSelectorValue
-          showEffort={false}
           placeholder={shell.loading ? "Loading models" : "Select model"}
           className="gap-1.5 [&>span]:font-normal"
         />
@@ -74,6 +105,7 @@ export function ComposerModelSelect() {
             </ModelSelectorGroup>
           ) : null}
         </ModelSelectorList>
+        <ModelSelectorEffort />
         <div className="border-t p-1.5">
           <Button
             type="button"

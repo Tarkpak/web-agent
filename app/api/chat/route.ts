@@ -1,6 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
-import { AISDKToolkit } from "@assistant-ui/ai-sdk";
+import { AISDKToolkit, injectQuoteContext } from "@assistant-ui/ai-sdk";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -18,7 +18,14 @@ import {
   generateOpenAIImage,
   lastUserText,
 } from "@/lib/images";
-import { classifyModel, isHttpUrl, resolveOpenAIAuth, sanitizeModelId } from "@/lib/provider";
+import {
+  classifyModel,
+  isHttpUrl,
+  resolveOpenAIAuth,
+  sanitizeModelId,
+  supportsReasoningEffort,
+  type ReasoningEffort,
+} from "@/lib/provider";
 import toolkit from "../../toolkit";
 
 export const maxDuration = 300;
@@ -70,6 +77,24 @@ function imageMessageResponse(
   return createUIMessageStreamResponse({ stream });
 }
 
+function createMessageMetadata() {
+  const steps: Array<{ usage: Record<string, unknown> }> = [];
+  return ({ part }: { part: { type: string; [key: string]: unknown } }) => {
+    if (part.type === "finish-step" && part.usage && typeof part.usage === "object") {
+      steps.push({ usage: part.usage as Record<string, unknown> });
+      return { steps: [...steps] };
+    }
+    if (part.type === "finish") {
+      return {
+        steps: [...steps],
+        usage: part.totalUsage && typeof part.totalUsage === "object" ? part.totalUsage : undefined,
+        custom: { finishReason: part.finishReason },
+      };
+    }
+    return undefined;
+  };
+}
+
 export async function POST(req: Request) {
   const {
     messages,
@@ -80,6 +105,9 @@ export async function POST(req: Request) {
     provider: requestedProvider,
     baseURL: requestedBaseURL,
     apiKey: requestedApiKey,
+    callSettings,
+    capabilities,
+    config,
   }: {
     messages: UIMessage[];
     system?: string;
@@ -89,16 +117,30 @@ export async function POST(req: Request) {
     provider?: string;
     baseURL?: string;
     apiKey?: string;
+    callSettings?: { temperature?: number };
+    capabilities?: { webSearch?: boolean; codeExecution?: boolean; imageGeneration?: boolean };
+    config?: { modelName?: string; reasoningEffort?: string };
   } = await req.json();
 
   const provider = requestedProvider === "xai" ? "xai" : "openai";
-  const modelId = sanitizeModelId(requestedModel);
+  const modelId = sanitizeModelId(config?.modelName ?? requestedModel);
+  const reasoningEffort: ReasoningEffort | undefined =
+    supportsReasoningEffort(provider, modelId) &&
+    (config?.reasoningEffort === "low" ||
+      config?.reasoningEffort === "medium" ||
+      config?.reasoningEffort === "high")
+      ? config.reasoningEffort
+      : undefined;
   const imageModelId = sanitizeModelId(requestedImageModel) || "gpt-image-2";
   const auth = resolveOpenAIAuth({
     provider,
     apiKey: requestedApiKey,
     baseURL: requestedBaseURL,
   });
+  const temperature =
+    typeof callSettings?.temperature === "number"
+      ? Math.min(2, Math.max(0, callSettings.temperature))
+      : undefined;
 
   if (!auth.apiKey) {
     return Response.json({ error: "Missing API key. Set it in Settings." }, { status: 500 });
@@ -108,6 +150,12 @@ export async function POST(req: Request) {
   }
 
   const toolkitTools = await aiToolkit.tools({ frontend: tools });
+  const {
+    web_search: _webSearchUI,
+    x_search: _xSearchUI,
+    code_execution: _codeExecutionUI,
+    ...appTools
+  } = toolkitTools;
 
   if (provider === "openai" && classifyModel(modelId || imageModelId) === "image") {
     try {
@@ -156,6 +204,10 @@ export async function POST(req: Request) {
         });
         return { dataUrl: image.dataUrl, mediaType: image.mediaType, prompt };
       },
+      toModelOutput: ({ output }) => ({
+        type: "text",
+        value: `Image generated successfully (${output.mediaType}). The image is displayed to the user.`,
+      }),
     }),
     edit_image: tool({
       description:
@@ -176,28 +228,40 @@ export async function POST(req: Request) {
         });
         return { dataUrl: image.dataUrl, mediaType: image.mediaType, prompt };
       },
+      toModelOutput: ({ output }) => ({
+        type: "text",
+        value: `Image edited successfully (${output.mediaType}). The image is displayed to the user.`,
+      }),
     }),
   };
+  const enabledImageTools = capabilities?.imageGeneration === false ? {} : imageTools;
 
   if (provider === "xai") {
     const xai = createXai({ apiKey: auth.apiKey });
+    const allTools = {
+      ...(capabilities?.webSearch === false
+        ? {}
+        : { web_search: xai.tools.webSearch(), x_search: xai.tools.xSearch() }),
+      ...(capabilities?.codeExecution === false
+        ? {}
+        : { code_execution: xai.tools.codeExecution() }),
+      ...enabledImageTools,
+      ...appTools,
+    };
     const result = streamText({
       model: xai.responses(modelId || "grok-4.6"),
-      messages: await convertToModelMessages(messages),
+      messages: await convertToModelMessages(injectQuoteContext(messages), { tools: allTools }),
       system: [systemPrompt("xai"), system].filter(Boolean).join("\n\n"),
       stopWhen: stepCountIs(12),
-      tools: {
-        web_search: xai.tools.webSearch(),
-        x_search: xai.tools.xSearch(),
-        code_execution: xai.tools.codeExecution(),
-        ...imageTools,
-        ...toolkitTools,
-      },
+      temperature,
+      providerOptions: reasoningEffort ? { xai: { reasoningEffort } } : undefined,
+      tools: allTools,
     });
 
     return result.toUIMessageStreamResponse({
       sendReasoning: true,
       sendSources: true,
+      messageMetadata: createMessageMetadata(),
       onError: (error) => (error instanceof Error ? error.message : String(error)),
     });
   }
@@ -206,21 +270,25 @@ export async function POST(req: Request) {
     apiKey: auth.apiKey,
     baseURL: auth.baseURL || undefined,
   });
+  const allTools = {
+    ...enabledImageTools,
+    ...appTools,
+  };
 
   const result = streamText({
     model: openai.chat(modelId || "gpt-4.1"),
-    messages: await convertToModelMessages(messages),
+    messages: await convertToModelMessages(injectQuoteContext(messages), { tools: allTools }),
     system: [systemPrompt("openai"), system].filter(Boolean).join("\n\n"),
     stopWhen: stepCountIs(12),
-    tools: {
-      ...imageTools,
-      ...toolkitTools,
-    },
+    temperature: reasoningEffort ? undefined : temperature,
+    providerOptions: reasoningEffort ? { openai: { reasoningEffort } } : undefined,
+    tools: allTools,
   });
 
   return result.toUIMessageStreamResponse({
     sendReasoning: true,
     sendSources: true,
+    messageMetadata: createMessageMetadata(),
     onError: (error) => (error instanceof Error ? error.message : String(error)),
   });
 }

@@ -1,10 +1,17 @@
 export type ProviderKind = "openai" | "xai";
+export type ReasoningEffort = "low" | "medium" | "high";
 
 export type ProviderSettings = {
   provider: ProviderKind;
   baseURL: string;
   apiKey: string;
   model: string;
+  reasoningEffort: ReasoningEffort;
+  systemPrompt: string;
+  temperature: number;
+  webSearch: boolean;
+  codeExecution: boolean;
+  imageGeneration: boolean;
 };
 
 export const DEFAULT_PROVIDER_SETTINGS: ProviderSettings = {
@@ -12,6 +19,12 @@ export const DEFAULT_PROVIDER_SETTINGS: ProviderSettings = {
   baseURL: "",
   apiKey: "",
   model: "",
+  reasoningEffort: "medium",
+  systemPrompt: "",
+  temperature: 0.7,
+  webSearch: true,
+  codeExecution: true,
+  imageGeneration: true,
 };
 
 export const PROVIDER_STORAGE_KEY = "agent-shell.provider";
@@ -38,6 +51,14 @@ export type CatalogModel = {
   ownedBy: string;
   kind: ModelKind;
 };
+
+export function supportsReasoningEffort(provider: ProviderKind, modelId: string) {
+  const id = modelId.toLowerCase();
+  if (provider === "xai") {
+    return /(^|[/_-])grok-(?:3-mini|4(?:[._-]|$))/.test(id);
+  }
+  return /(^|[/_-])(?:gpt-5(?:[._-]|$)|o[134](?:[._-]|$))/.test(id);
+}
 
 export function toWireModelId(id: string, _ownedBy?: string) {
   // The OpenAI-compatible /v1/models `id` is the exact value to send in
