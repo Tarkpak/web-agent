@@ -53,7 +53,7 @@ export const ThreadListSearch = forwardRef<
   }
 >(({ className, value, onValueChange, ...props }, ref) => {
   return (
-    <div data-slot="aui_thread-list-search" className="relative px-0.5 py-1">
+    <div data-slot="aui_thread-list-search" className="relative px-0.5 py-1.5">
       <SearchIcon
         data-slot="aui_thread-list-search-icon"
         className="text-muted-foreground pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2"
@@ -65,7 +65,10 @@ export const ThreadListSearch = forwardRef<
         onChange={(event) => onValueChange(event.target.value)}
         aria-label="Search threads"
         placeholder="Search threads"
-        className={cn("h-8 ps-8 text-sm", className)}
+        className={cn(
+          "h-9 rounded-lg border-sidebar-border/80 bg-background/55 ps-8 text-sm shadow-none",
+          className,
+        )}
         {...props}
       />
     </div>
@@ -81,7 +84,7 @@ export const ThreadListRoot: FC<ComponentPropsWithoutRef<typeof ThreadListPrimit
   return (
     <ThreadListPrimitive.Root
       data-slot="aui_thread-list-root"
-      className={cn("flex flex-col gap-0.5", className)}
+      className={cn("flex min-h-0 flex-1 flex-col gap-1", className)}
       {...props}
     />
   );
@@ -95,7 +98,7 @@ export const ThreadListItems: FC<ComponentPropsWithoutRef<"div"> & { searchQuery
   return (
     <div
       data-slot="aui_thread-list-items"
-      className={cn("flex flex-col gap-0.5", className)}
+      className={cn("flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto", className)}
       {...props}
     >
       <AuiIf condition={(s) => s.threads.isLoading}>
@@ -178,7 +181,7 @@ const ThreadListItemGroups: FC<{ searchQuery?: string }> = ({ searchQuery = "" }
     <Fragment key={group.label}>
       <div
         data-slot="aui_thread-list-group-label"
-        className="text-muted-foreground px-2.5 pt-3 pb-1 text-xs font-medium"
+        className="text-muted-foreground/75 px-2.5 pt-3.5 pb-1 text-[11px] font-medium tracking-wide"
       >
         {group.label}
       </div>
@@ -205,7 +208,7 @@ export const ThreadListNew = forwardRef<
           variant="ghost"
           data-slot="aui_thread-list-new"
           className={cn(
-            "hover:bg-muted data-active:bg-muted h-8 justify-start gap-2 rounded-md px-2.5 text-sm font-normal",
+            "bg-foreground text-background hover:bg-foreground/90 hover:text-background data-active:bg-foreground/90 h-9 justify-start gap-2 rounded-lg px-2.5 text-sm font-medium shadow-sm transition-[background-color,transform] active:translate-y-px",
             className,
           )}
           {...props}
@@ -219,7 +222,7 @@ export const ThreadListNew = forwardRef<
             data-slot="aui_thread-list-new-label"
             className={cn("whitespace-nowrap", labelClassName)}
           >
-            New Thread
+            New conversation
           </span>
         </>
       )}
@@ -262,7 +265,7 @@ export const ThreadListItem: FC = () => {
   return (
     <ThreadListItemPrimitive.Root
       data-slot="aui_thread-list-item"
-      className="group hover:bg-muted focus-visible:bg-muted data-active:bg-muted has-focus-visible:bg-muted has-data-[state=open]:bg-muted relative flex h-8 items-center rounded-md transition-colors focus-visible:outline-none"
+      className="group/thread-item hover:bg-sidebar-accent focus-visible:bg-sidebar-accent data-active:bg-sidebar-accent has-focus-visible:bg-sidebar-accent has-data-[state=open]:bg-sidebar-accent relative flex min-h-9 items-center rounded-lg transition-colors focus-visible:outline-none data-active:font-medium"
     >
       {isRenaming ? (
         <ThreadListItemRename
@@ -275,7 +278,7 @@ export const ThreadListItem: FC = () => {
         <ThreadListItemPrimitive.Trigger
           ref={triggerRef}
           data-slot="aui_thread-list-item-trigger"
-          className="focus-visible:ring-ring/50 flex h-full min-w-0 flex-1 items-center rounded-md px-2.5 text-start text-sm outline-none group-hover:pe-9 group-has-focus-visible:pe-9 group-has-data-[state=open]:pe-9 group-data-active:pe-9 focus-visible:ring-1"
+          className="focus-visible:ring-ring/50 flex min-h-9 min-w-0 flex-1 items-center rounded-lg px-2.5 text-start text-sm outline-none group-hover/thread-item:pe-9 group-has-focus-visible/thread-item:pe-9 group-has-data-[state=open]/thread-item:pe-9 group-data-active/thread-item:pe-9 focus-visible:ring-1"
         >
           {isRunning && (
             <Loader2Icon
@@ -368,7 +371,7 @@ const ThreadListItemMore: FC<{ onRename: () => void }> = ({ onRename }) => {
             variant="ghost"
             size="icon"
             data-slot="aui_thread-list-item-more"
-            className="data-[state=open]:bg-accent absolute end-1.5 top-1/2 size-6 -translate-y-1/2 p-0 opacity-0 group-hover:opacity-100 group-has-focus-visible:opacity-100 group-data-active:opacity-100 data-[state=open]:opacity-100"
+            className="data-[state=open]:bg-accent absolute end-1.5 top-1/2 size-6 -translate-y-1/2 p-0 opacity-0 group-hover/thread-item:opacity-100 group-has-focus-visible/thread-item:opacity-100 group-data-active/thread-item:opacity-100 data-[state=open]:opacity-100"
           />
         }
       >

@@ -181,20 +181,32 @@ function wrapText(value: string, maxUnits: number, maxLines: number) {
   const lines: string[] = [];
   let current = "";
   let units = 0;
-  for (const character of Array.from(value.trim())) {
+  let truncated = false;
+  const characters = Array.from(value.trim());
+  for (const [index, character] of characters.entries()) {
     const size = (character.codePointAt(0) ?? 0) > 0xff ? 2 : 1;
     if (units + size > maxUnits && current) {
-      lines.push(current.trim());
-      current = "";
-      units = 0;
-      if (lines.length === maxLines) break;
+      const whitespaceIndex = Math.max(current.lastIndexOf(" "), current.lastIndexOf("\t"));
+      if (whitespaceIndex > 0) {
+        lines.push(current.slice(0, whitespaceIndex).trim());
+        current = `${current.slice(whitespaceIndex + 1)}${character}`;
+        units = textLength(current);
+      } else {
+        lines.push(current.trim());
+        current = character;
+        units = size;
+      }
+      if (lines.length === maxLines) {
+        truncated = index < characters.length;
+        break;
+      }
+      continue;
     }
     current += character;
     units += size;
   }
   if (current && lines.length < maxLines) lines.push(current.trim());
-  const consumed = lines.reduce((total, line) => total + textLength(line), 0);
-  if (consumed < textLength(value.trim()) && lines.length) {
+  if (truncated && lines.length) {
     lines[lines.length - 1] = `${lines[lines.length - 1].replace(/[.。,:：;；!！?？\s]+$/, "")}...`;
   }
   return lines;
@@ -226,10 +238,15 @@ export function buildPresentationSlide(input: BuildSlideInput): PresentationSlid
       ),
     ),
   } as typeof fallback;
+  const style = design?.visualStyle?.toLowerCase() ?? "";
+  const isEditorial = /editorial|magazine|journal|刊|杂志/.test(style);
+  const isTechnical = /technical|blueprint|data|dashboard|tech|工程|蓝图|数据/.test(style);
+  const isExpressive =
+    /brutal|zine|poster|memphis|paper|ink|chalk|sketch|pixel|海报|手绘|拼贴/.test(style);
   const fontFamily =
-    design?.typography === "editorial"
+    design?.typography === "editorial" || isEditorial
       ? "Georgia"
-      : design?.typography === "technical"
+      : design?.typography === "technical" || isTechnical
         ? "Aptos Mono"
         : design?.typography === "friendly"
           ? "Arial Rounded MT Bold"
@@ -237,6 +254,10 @@ export function buildPresentationSlide(input: BuildSlideInput): PresentationSlid
   const titleFontFamily = brand?.titleFont || fontFamily;
   const bodyFontFamily = brand?.bodyFont || fontFamily;
   const densityScale = design?.density === "airy" ? 1.12 : design?.density === "dense" ? 0.9 : 1;
+  const titleWeight = isEditorial ? 600 : isExpressive ? 800 : 700;
+  const headerAlignedRight =
+    design?.composition === "cinematic" ||
+    /right|asymmetr|右|非对称/.test(design?.compositionRule ?? "");
   const page = String(index + 1).padStart(2, "0");
   const layout = slide.layout ?? (index === 0 ? "cover" : "split");
   const template = resolvePresentationTemplate(layout, slide.templateId);
@@ -288,6 +309,12 @@ export function buildPresentationSlide(input: BuildSlideInput): PresentationSlid
   };
   const addStandardHeader = (showSubtitle = true) => {
     const titleBounds = bounds("title", { x: 90, y: 125, width: 1380, height: 70 });
+    const titleUnits = textLength(slide.title);
+    const titleFontSize = Math.max(
+      35,
+      Math.round((titleUnits > 60 ? 38 : titleUnits > 46 ? 43 : 50) * densityScale),
+    );
+    const titleLines = titleUnits > 46 ? 2 : 1;
     addText({
       value: page,
       x: 90,
@@ -302,21 +329,21 @@ export function buildPresentationSlide(input: BuildSlideInput): PresentationSlid
     });
     addText({
       value: slide.title,
-      x: titleBounds.x,
+      x: headerAlignedRight ? Math.max(titleBounds.x, 420) : titleBounds.x,
       y: titleBounds.y,
-      width: titleBounds.width,
-      height: titleBounds.height,
-      fontSize: Math.round(50 * densityScale),
+      width: headerAlignedRight ? Math.min(titleBounds.width, 1050) : titleBounds.width,
+      height: titleLines === 2 ? 112 : titleBounds.height,
+      fontSize: titleFontSize,
       color: colors.foreground,
-      weight: 700,
-      maxLines: 1,
-      lineHeight: 1.2,
+      weight: titleWeight,
+      maxLines: titleLines,
+      lineHeight: 1.12,
     });
     if (slide.subtitle && showSubtitle)
       addText({
         value: slide.subtitle,
         x: 90,
-        y: 205,
+        y: titleLines === 2 ? 242 : 205,
         width: 1320,
         fontSize: 24,
         color: colors.secondary,
@@ -328,10 +355,15 @@ export function buildPresentationSlide(input: BuildSlideInput): PresentationSlid
   const bullets = slide.bullets?.slice(0, 6) ?? [];
 
   if (layout === "cover") {
-    const alignedRight = design?.composition === "cinematic";
+    const alignedRight = headerAlignedRight;
     const titleBounds = bounds("title", { x: 110, y: 245, width: 820, height: 190 });
     const subtitleBounds = bounds("subtitle", { x: 110, y: 455, width: 800, height: 100 });
     const x = alignedRight ? 650 : titleBounds.x;
+    const coverTitleUnits = textLength(slide.title || deckTitle);
+    const coverTitleFontSize = Math.max(
+      50,
+      Math.round((coverTitleUnits > 54 ? 50 : coverTitleUnits > 42 ? 58 : 76) * densityScale),
+    );
     elements.push({
       kind: "rect",
       x: alignedRight ? 70 : 1360,
@@ -347,9 +379,9 @@ export function buildPresentationSlide(input: BuildSlideInput): PresentationSlid
       y: titleBounds.y,
       width: titleBounds.width,
       height: titleBounds.height,
-      fontSize: Math.round(76 * densityScale),
+      fontSize: coverTitleFontSize,
       color: colors.foreground,
-      weight: 700,
+      weight: titleWeight,
       maxLines: 2,
       lineHeight: 1.12,
       role: "title",
@@ -378,6 +410,13 @@ export function buildPresentationSlide(input: BuildSlideInput): PresentationSlid
   } else if (layout === "statement") {
     const titleBounds = bounds("title", { x: 150, y: 300, width: 1290, height: 280 });
     const bodyBounds = bounds("body", { x: 155, y: 620, width: 1050, height: 105 });
+    const statementTitleUnits = textLength(slide.title);
+    const statementTitleFontSize = Math.max(
+      35,
+      Math.round(
+        (statementTitleUnits > 90 ? 35 : statementTitleUnits > 64 ? 44 : 70) * densityScale,
+      ),
+    );
     addText({
       value: page,
       x: 90,
@@ -385,7 +424,7 @@ export function buildPresentationSlide(input: BuildSlideInput): PresentationSlid
       width: 80,
       fontSize: 18,
       color: colors.accent,
-      weight: 700,
+      weight: titleWeight,
       maxLines: 1,
       lineHeight: 1.2,
     });
@@ -395,10 +434,10 @@ export function buildPresentationSlide(input: BuildSlideInput): PresentationSlid
       y: titleBounds.y,
       width: titleBounds.width,
       height: titleBounds.height,
-      fontSize: Math.round(82 * densityScale),
+      fontSize: statementTitleFontSize,
       color: colors.foreground,
       weight: 700,
-      maxLines: 3,
+      maxLines: statementTitleUnits > 64 ? 4 : 3,
       lineHeight: 1.08,
       role: "title",
     });
@@ -684,6 +723,20 @@ export function buildPresentationSlide(input: BuildSlideInput): PresentationSlid
       weight: 400,
       maxLines: 1,
       lineHeight: 1.2,
+    });
+  }
+  if (!masterProfile && design?.recurringMotif) {
+    const motif = design.recurringMotif.trim();
+    const motifWidth = Math.min(300, Math.max(110, textLength(motif) * 8));
+    elements.push({
+      kind: "line",
+      x: 90,
+      y: 792,
+      width: motifWidth,
+      height: 0,
+      color: colors.accent,
+      opacity: isExpressive ? 0.9 : 0.45,
+      lineWidth: isExpressive ? 5 : 2,
     });
   }
   if (brand?.logoText && !masterProfile) {

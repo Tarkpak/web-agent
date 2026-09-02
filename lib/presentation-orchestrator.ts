@@ -1,4 +1,5 @@
 import type {
+  PresentationDesign,
   PresentationLayout,
   PresentationNarrativeQuality,
   PresentationSlide,
@@ -33,6 +34,25 @@ function uniqueLayouts(layouts: PresentationLayout[]) {
   return layouts.filter((layout, index) => layouts.indexOf(layout) === index);
 }
 
+function consolidateCandidates(
+  candidates: Array<{ layout: PresentationLayout; score: number; reason: string }>,
+) {
+  const strongest = new Map<PresentationLayout, (typeof candidates)[number]>();
+  for (const candidate of candidates) {
+    const current = strongest.get(candidate.layout);
+    if (!current || candidate.score > current.score) strongest.set(candidate.layout, candidate);
+  }
+  return [...strongest.values()].sort((a, b) => b.score - a.score);
+}
+
+function preservesContent(slide: PresentationSlide, layout: PresentationLayout) {
+  const slots = TEMPLATE_BY_LAYOUT.get(layout)?.slots;
+  if (!slots) return false;
+  if (slide.body?.trim() && !slots.body) return false;
+  if (slide.bullets?.some((bullet) => bullet.trim()) && !slots.bullets) return false;
+  return true;
+}
+
 function inferSection(slide: PresentationSlide, index: number, total: number) {
   if (index === 0 || slide.layout === "cover") return "Opening";
   if (index === total - 1 || slide.layout === "closing") return "Decision";
@@ -43,7 +63,20 @@ function inferSection(slide: PresentationSlide, index: number, total: number) {
   return "Analysis";
 }
 
-function candidates(slide: PresentationSlide, index: number, total: number) {
+function candidates(
+  slide: PresentationSlide,
+  index: number,
+  total: number,
+  design?: PresentationDesign,
+) {
+  if (index === 0)
+    return [
+      {
+        layout: "cover" as const,
+        score: 100,
+        reason: "The opening page establishes the deck title and context.",
+      },
+    ];
   if (slide.chart)
     return [
       {
@@ -60,21 +93,13 @@ function candidates(slide: PresentationSlide, index: number, total: number) {
         reason: "Tabular data requires the editable table layout.",
       },
     ];
-  if (index === 0)
-    return [
-      {
-        layout: "cover" as const,
-        score: 100,
-        reason: "The opening page establishes the deck title and context.",
-      },
-    ];
-
   const text = contentText(slide);
   const bullets = slide.bullets?.length ?? 0;
   const bodyUnits = textUnits(slide.body);
   const results: Array<{ layout: PresentationLayout; score: number; reason: string }> = [];
   const add = (layout: PresentationLayout, score: number, reason: string) =>
     results.push({ layout, score, reason });
+  const mode = design?.narrativeMode;
 
   if (QUOTE_PATTERN.test(text) && bodyUnits <= 260)
     add("quote", 88, "Quotation signals and concise copy suit an editorial quote page.");
@@ -88,11 +113,36 @@ function candidates(slide: PresentationSlide, index: number, total: number) {
     add("list", 78, "A concise point sequence benefits from a numbered list.");
   if (bodyUnits > 0 && bodyUnits <= 180 && bullets === 0)
     add("statement", 76, "A single concise claim benefits from a focused statement page.");
+  if (mode === "showcase" && bullets === 0 && bodyUnits > 0 && bodyUnits <= 220)
+    add("statement", 85, "Showcase pacing favors one visually dominant claim.");
+  if (mode === "narrative" && bodyUnits > 0 && bodyUnits <= 260)
+    add("quote", 73, "Narrative pacing benefits from a human-scale beat between evidence pages.");
+  if (mode === "instructional" && bullets >= 3)
+    add(
+      TIMELINE_PATTERN.test(text) ? "timeline" : "list",
+      83,
+      "Instructional sequencing keeps concepts and steps easy to follow.",
+    );
+  if (mode === "pyramid" && slide.body && bullets)
+    add("split", 88, "Conclusion-first reasoning pairs the claim with its supporting evidence.");
+  if (mode === "briefing" && bullets >= 3)
+    add("list", 82, "Briefing mode favors neutral, scannable information blocks.");
   if (index === total - 1 && CLOSING_PATTERN.test(text))
     add("closing", 90, "The final action or conclusion resolves the narrative.");
   add("split", 55, "The balanced narrative layout is the safest general-purpose fit.");
   add("list", 48, "A list layout is a viable alternate for scannable supporting points.");
-  return results.sort((a, b) => b.score - a.score);
+  const contentSafe = consolidateCandidates(results).filter((candidate) =>
+    preservesContent(slide, candidate.layout),
+  );
+  return contentSafe.length
+    ? contentSafe
+    : [
+        {
+          layout: "split" as const,
+          score: 50,
+          reason: "The narrative and points layout preserves every supplied content field.",
+        },
+      ];
 }
 
 function splitSentences(value: string) {
@@ -208,9 +258,9 @@ function scoreDeck(slides: PresentationSlide[]): PresentationNarrativeQuality {
   return { score, dimensions: { structure, pacing, density, variety }, strengths, suggestions };
 }
 
-export function orchestratePresentation(slides: PresentationSlide[]) {
+export function orchestratePresentation(slides: PresentationSlide[], design?: PresentationDesign) {
   const arranged = slides.flatMap((sourceSlide, index) => {
-    const ranked = candidates(sourceSlide, index, slides.length);
+    const ranked = candidates(sourceSlide, index, slides.length, design);
     const selected = ranked[0];
     const slide = {
       ...sourceSlide,

@@ -26,13 +26,13 @@ export const PRESENTATION_TEMPLATES: readonly PresentationTemplate[] = [
     slots: {
       title: {
         accepts: "text",
-        bounds: { x: 110, y: 245, width: 820, height: 190 },
-        maxCharacters: 54,
+        bounds: { x: 110, y: 245, width: 1120, height: 190 },
+        maxCharacters: 72,
       },
       subtitle: {
         accepts: "text",
-        bounds: { x: 110, y: 455, width: 800, height: 100 },
-        maxCharacters: 90,
+        bounds: { x: 110, y: 455, width: 1040, height: 100 },
+        maxCharacters: 120,
       },
     },
   },
@@ -45,7 +45,7 @@ export const PRESENTATION_TEMPLATES: readonly PresentationTemplate[] = [
       title: {
         accepts: "text",
         bounds: { x: 150, y: 300, width: 1290, height: 280 },
-        maxCharacters: 90,
+        maxCharacters: 240,
       },
       body: {
         accepts: "text",
@@ -63,7 +63,7 @@ export const PRESENTATION_TEMPLATES: readonly PresentationTemplate[] = [
       title: {
         accepts: "text",
         bounds: { x: 90, y: 125, width: 1380, height: 70 },
-        maxCharacters: 48,
+        maxCharacters: 90,
       },
       body: {
         accepts: "text",
@@ -87,7 +87,7 @@ export const PRESENTATION_TEMPLATES: readonly PresentationTemplate[] = [
       title: {
         accepts: "text",
         bounds: { x: 90, y: 125, width: 1380, height: 70 },
-        maxCharacters: 48,
+        maxCharacters: 90,
       },
       bullets: {
         accepts: "list",
@@ -106,7 +106,7 @@ export const PRESENTATION_TEMPLATES: readonly PresentationTemplate[] = [
       title: {
         accepts: "text",
         bounds: { x: 90, y: 125, width: 1380, height: 70 },
-        maxCharacters: 48,
+        maxCharacters: 90,
       },
       bullets: {
         accepts: "list",
@@ -125,7 +125,7 @@ export const PRESENTATION_TEMPLATES: readonly PresentationTemplate[] = [
       title: {
         accepts: "text",
         bounds: { x: 90, y: 125, width: 1380, height: 70 },
-        maxCharacters: 48,
+        maxCharacters: 90,
       },
       bullets: {
         accepts: "list",
@@ -162,7 +162,7 @@ export const PRESENTATION_TEMPLATES: readonly PresentationTemplate[] = [
       title: {
         accepts: "text",
         bounds: { x: 260, y: 320, width: 1080, height: 180 },
-        maxCharacters: 60,
+        maxCharacters: 90,
       },
       body: {
         accepts: "text",
@@ -180,7 +180,7 @@ export const PRESENTATION_TEMPLATES: readonly PresentationTemplate[] = [
       title: {
         accepts: "text",
         bounds: { x: 90, y: 125, width: 1380, height: 70 },
-        maxCharacters: 48,
+        maxCharacters: 90,
       },
       chart: {
         accepts: "chart",
@@ -198,7 +198,7 @@ export const PRESENTATION_TEMPLATES: readonly PresentationTemplate[] = [
       title: {
         accepts: "text",
         bounds: { x: 90, y: 125, width: 1380, height: 70 },
-        maxCharacters: 48,
+        maxCharacters: 90,
       },
       table: {
         accepts: "table",

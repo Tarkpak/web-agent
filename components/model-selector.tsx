@@ -415,7 +415,7 @@ function ModelSelectorContent({
       {...props}
     >
       <Command
-        className="bg-transparent"
+        className="max-h-[inherit] min-h-0 bg-transparent"
         shouldFilter={!unfiltered}
         {...(value !== undefined ? { defaultValue: value } : {})}
       >
@@ -450,7 +450,7 @@ function ModelSelectorList({ className, children, ...props }: ModelSelectorListP
     <CommandList
       data-slot="model-selector-list"
       className={cn(
-        "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        "min-h-0 flex-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         className,
       )}
       {...props}

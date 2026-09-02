@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SettingsIcon } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type ReactElement } from "react";
 
 const PROVIDERS = [
   { label: "OpenAI compatible", value: "openai" },
@@ -35,10 +35,12 @@ export function ProviderSettingsButton({
   settings,
   models,
   onSave,
+  trigger,
 }: {
   settings: ProviderSettings;
   models: CatalogModel[];
   onSave: (next: ProviderSettings) => void;
+  trigger?: ReactElement;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(settings);
@@ -50,7 +52,9 @@ export function ProviderSettingsButton({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="ghost" size="icon" aria-label="Provider settings" />}>
+      <DialogTrigger
+        render={trigger ?? <Button variant="ghost" size="icon" aria-label="Provider settings" />}
+      >
         <SettingsIcon className="size-4" />
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">

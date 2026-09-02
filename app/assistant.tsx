@@ -1,7 +1,6 @@
 "use client";
 
 import { ArtifactCanvas } from "@/components/artifact-canvas";
-import { ProviderSettingsButton } from "@/components/provider-settings";
 import { ShellProvider } from "@/components/shell-context";
 import { Thread, type ThreadComponents } from "@/components/assistant-ui/elements/thread";
 import { ThreadListSidebar } from "@/components/assistant-ui/elements/thread-list-sidebar";
@@ -22,6 +21,7 @@ import {
   WebSpeechDictationAdapter,
   type SpeechSynthesisAdapter,
   useAui,
+  useAuiState,
   useAuiToolOverrides,
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react";
@@ -63,18 +63,77 @@ const STARTERS = Suggestions([
 
 function AgentWelcome() {
   return (
-    <div className="aui-thread-welcome-root mb-6 flex flex-col items-center px-4 text-center">
-      <h1 className="fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
-        What should we work on?
+    <div className="aui-thread-welcome-root mb-7 flex flex-col items-center px-4 text-center">
+      <div className="mb-5 flex size-11 items-center justify-center rounded-xl bg-foreground text-background shadow-sm">
+        <span className="font-mono text-sm font-semibold">A</span>
+      </div>
+      <h1 className="fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-semibold tracking-tight duration-200">
+        Start with a goal
       </h1>
-      <p className="text-muted-foreground fade-in animate-in mt-2 max-w-md text-sm duration-200">
-        Attach a photo to read it, pick gpt-image-2 to generate or edit, or just chat.
+      <p className="text-muted-foreground fade-in animate-in mt-2 max-w-sm text-sm leading-6 text-pretty duration-200">
+        Ask a question, attach source material, or describe what you want the agent to create.
       </p>
     </div>
   );
 }
 
 const AGENT_THREAD_COMPONENTS: ThreadComponents = { Welcome: AgentWelcome };
+
+const paintProgressFrame = () =>
+  new Promise<void>((resolve) => {
+    const timeout = window.setTimeout(resolve, 50);
+    window.requestAnimationFrame(() => {
+      window.clearTimeout(timeout);
+      resolve();
+    });
+  });
+
+function ConversationHeader({
+  provider,
+  searchOpen,
+  onToggleSearch,
+}: {
+  provider: string;
+  searchOpen: boolean;
+  onToggleSearch: () => void;
+}) {
+  const mainThreadId = useAuiState((s) => s.threads.mainThreadId);
+  const threadItems = useAuiState((s) => s.threads.threadItems);
+  const isLoading = useAuiState((s) => s.thread.isLoading || s.threads.isLoading);
+  const isRunning = useAuiState((s) => s.thread.isRunning);
+  const title = threadItems.find((item) => item.id === mainThreadId)?.title || "New conversation";
+
+  return (
+    <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-background/90 px-3 backdrop-blur-md md:px-4">
+      <SidebarTrigger />
+      <Separator orientation="vertical" className="mx-1 h-4" />
+      <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">
+            {isLoading ? "Loading conversation..." : title}
+          </p>
+          <div className="text-muted-foreground mt-0.5 flex items-center gap-1.5 text-[11px]">
+            <span
+              className={`size-1.5 rounded-full ${isRunning ? "animate-pulse bg-emerald-500" : "bg-muted-foreground/40"}`}
+              aria-hidden
+            />
+            <span>
+              {isRunning ? "Working" : provider === "xai" ? "xAI Grok" : "OpenAI compatible"}
+            </span>
+          </div>
+        </div>
+        <TooltipIconButton
+          tooltip="Find in conversation"
+          onClick={onToggleSearch}
+          aria-pressed={searchOpen}
+          className="shrink-0"
+        >
+          <SearchIcon className="size-4" />
+        </TooltipIconButton>
+      </div>
+    </header>
+  );
+}
 
 function ArtifactBridge({ onPresent }: { onPresent: (artifact: Artifact) => void }) {
   const runFileAction = async (
@@ -119,7 +178,7 @@ function ArtifactBridge({ onPresent }: { onPresent: (artifact: Artifact) => void
     },
     create_presentation: {
       execute: async (args) => {
-        onPresent({
+        const baseArtifact = {
           kind: "presentation",
           title: args.title,
           subtitle: args.subtitle,
@@ -128,54 +187,98 @@ function ArtifactBridge({ onPresent }: { onPresent: (artifact: Artifact) => void
           brand: args.brand,
           slides: args.slides,
           generationStatus: "building",
+          generationStage: "layout",
+          generationStageIndex: 0,
+          generationProgress: 0,
+          generationMessage: "Preparing the presentation structure",
           previewUrls: [],
-        } as Artifact);
-        const response = await fetch("/api/presentations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(args),
-        });
-        const result = await response.json();
-        if (!response.ok) {
+        } as Artifact;
+        let currentArtifact = baseArtifact;
+        onPresent(baseArtifact);
+        try {
+          const response = await fetch("/api/presentations?stream=1", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(args),
+          });
+          if (!response.ok) {
+            const result = await response.json();
+            throw new Error(result.error || "Could not create the PowerPoint file.");
+          }
+
+          if (!response.body) throw new Error("Presentation progress stream was unavailable.");
+          const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+          let buffer = "";
+          let finalResult: Record<string, any> | undefined;
+          while (true) {
+            const { value, done } = await reader.read();
+            buffer += value ?? "";
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              const event = JSON.parse(line) as Record<string, any>;
+              if (event.type === "error") throw new Error(event.error);
+              if (event.type === "complete") {
+                finalResult = event.result;
+                continue;
+              }
+              const nextPreviews = [...(currentArtifact.previewUrls ?? [])];
+              if (event.type === "preview" && typeof event.index === "number") {
+                nextPreviews[event.index] = event.previewUrl;
+              }
+              currentArtifact = {
+                ...currentArtifact,
+                slides: event.slides ?? currentArtifact.slides,
+                generationStage: event.stage,
+                generationStageIndex: event.stageIndex,
+                generationProgress: event.progress,
+                generationMessage: event.message,
+                previewUrls: nextPreviews,
+              };
+              onPresent(currentArtifact);
+              await paintProgressFrame();
+            }
+            if (done) break;
+          }
+          if (!finalResult) throw new Error("Presentation generation ended before completion.");
+          const readyArtifact = {
+            ...currentArtifact,
+            slides: finalResult.slides ?? currentArtifact.slides,
+            generationStatus: "ready",
+            generationStage: "verify",
+            generationStageIndex: 4,
+            generationProgress: 1,
+            generationMessage: "PowerPoint ready",
+            previewUrls: finalResult.previewUrls,
+            qualityIssues: finalResult.quality?.issues,
+            narrativeQuality: finalResult.quality?.narrative,
+            fileName: finalResult.fileName,
+            downloadUrl: finalResult.downloadUrl,
+          } as Artifact;
+          onPresent(readyArtifact);
+          return finalResult;
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Could not create the PowerPoint file.";
           onPresent({
-            kind: "presentation",
-            title: args.title,
-            subtitle: args.subtitle,
-            theme: args.theme ?? "tech",
-            design: args.design,
-            brand: args.brand,
-            slides: args.slides,
+            ...currentArtifact,
             generationStatus: "error",
-            generationError: result.error || "Could not create the PowerPoint file.",
-            previewUrls: [],
+            generationError: message,
+            generationMessage: "Generation stopped",
           } as Artifact);
-          throw new Error(result.error || "Could not create the PowerPoint file.");
+          throw error;
         }
-        onPresent({
-          kind: "presentation",
-          title: args.title,
-          subtitle: args.subtitle,
-          theme: args.theme ?? "tech",
-          design: args.design,
-          brand: args.brand,
-          slides: result.slides ?? args.slides,
-          generationStatus: "ready",
-          previewUrls: result.previewUrls,
-          qualityIssues: result.quality?.issues,
-          narrativeQuality: result.quality?.narrative,
-          fileName: result.fileName,
-          downloadUrl: result.downloadUrl,
-        } as Artifact);
-        return result;
       },
     },
   });
   return null;
 }
 
-export const Assistant = () => {
+export const Assistant = ({ initialThreadId }: { initialThreadId?: string }) => {
   const { settings, save, ready } = useProviderSettings();
   const { models, loading, error, refresh } = useRemoteModels(settings, ready);
+  const [threadId, setThreadId] = useState<string | undefined>(initialThreadId);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [voiceAdapters, setVoiceAdapters] = useState<{
@@ -190,6 +293,15 @@ export const Assistant = () => {
         ? new WebSpeechDictationAdapter({ continuous: true, interimResults: true })
         : undefined,
     });
+  }, []);
+
+  useEffect(() => {
+    setThreadId(new URL(window.location.href).searchParams.get("thread") ?? undefined);
+    const handlePopState = () => {
+      setThreadId(new URL(window.location.href).searchParams.get("thread") ?? undefined);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   useEffect(() => {
@@ -251,6 +363,17 @@ export const Assistant = () => {
 
   const runtime = useRemoteThreadListRuntime({
     adapter: serverThreadListAdapter,
+    threadId,
+    onThreadIdChange: (nextThreadId) => {
+      setThreadId(nextThreadId);
+      const url = new URL(window.location.href);
+      if (nextThreadId) {
+        url.searchParams.set("thread", nextThreadId);
+      } else {
+        url.searchParams.delete("thread");
+      }
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    },
     runtimeHook: () =>
       useChatRuntime({
         sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
@@ -287,31 +410,13 @@ export const Assistant = () => {
         <ArtifactBridge onPresent={setArtifact} />
         <SidebarProvider>
           <div className="flex h-dvh w-full">
-            <ThreadListSidebar />
+            <ThreadListSidebar settings={settings} models={models} onSaveSettings={save} />
             <SidebarInset>
-              <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-                <SidebarTrigger />
-                <Separator orientation="vertical" className="mr-2 h-4" />
-                <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">Agent Shell</p>
-                    <p className="text-muted-foreground truncate text-xs">
-                      {settings.provider === "xai" ? "xAI Grok" : "OpenAI compatible"}
-                      {error ? " · models unavailable" : ""}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <TooltipIconButton
-                      tooltip="Find in conversation"
-                      onClick={() => setSearchOpen((value) => !value)}
-                      aria-pressed={searchOpen}
-                    >
-                      <SearchIcon className="size-4" />
-                    </TooltipIconButton>
-                    <ProviderSettingsButton settings={settings} models={models} onSave={save} />
-                  </div>
-                </div>
-              </header>
+              <ConversationHeader
+                provider={settings.provider}
+                searchOpen={searchOpen}
+                onToggleSearch={() => setSearchOpen((value) => !value)}
+              />
               {searchOpen && (
                 <div className="border-b p-2">
                   <ConversationSearch onClose={() => setSearchOpen(false)} />

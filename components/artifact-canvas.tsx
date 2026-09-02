@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useProviderSettings } from "@/hooks/use-provider-settings";
 import type { Artifact } from "@/lib/artifacts";
+import { JobProgress, type JobStage } from "@/components/assistant-ui/elements/job-progress";
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
 import {
@@ -26,6 +27,21 @@ import { useEffect, useMemo, useState } from "react";
 import { Streamdown } from "streamdown";
 
 const streamdownPlugins = { cjk, code };
+const presentationBuildStages: readonly JobStage[] = [
+  { name: "layout", weight: 1 },
+  { name: "preview", weight: 5 },
+  { name: "export", weight: 3 },
+  { name: "verify", weight: 1 },
+];
+
+const paintProgressFrame = () =>
+  new Promise<void>((resolve) => {
+    const timeout = window.setTimeout(resolve, 50);
+    window.requestAnimationFrame(() => {
+      window.clearTimeout(timeout);
+      resolve();
+    });
+  });
 
 function formatFileSize(bytes?: number) {
   if (bytes === undefined) return null;
@@ -224,7 +240,7 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
   const [importingTemplate, setImportingTemplate] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [mode, setMode] = useState<"preview" | "edit">(
-    artifact.previewUrls?.length ? "preview" : "edit",
+    artifact.generationStatus === "building" || artifact.previewUrls?.length ? "preview" : "edit",
   );
 
   useEffect(() => {
@@ -249,6 +265,10 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
                 ? "drafting"
                 : (artifact.generationStatus ?? current.generationStatus),
             generationError: artifact.generationError ?? current.generationError,
+            generationStage: artifact.generationStage ?? current.generationStage,
+            generationStageIndex: artifact.generationStageIndex ?? current.generationStageIndex,
+            generationProgress: artifact.generationProgress ?? current.generationProgress,
+            generationMessage: artifact.generationMessage ?? current.generationMessage,
           }
         : artifact,
     );
@@ -260,8 +280,20 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
     }
   }, [artifact.generationStatus, artifact.previewUrls]);
 
+  useEffect(() => {
+    if (artifact.generationStatus === "building") {
+      setMode("preview");
+      const latest = (artifact.previewUrls ?? []).reduce(
+        (last, url, index) => (url ? index : last),
+        0,
+      );
+      setActiveSlide(latest);
+    }
+  }, [artifact.generationStatus, artifact.previewUrls]);
+
   const slides = deck.slides ?? [];
   const slide = slides[activeSlide] ?? slides[0];
+  const blockingIssues = deck.qualityIssues?.filter((issue) => issue.severity === "error") ?? [];
   const theme = themeStyles[deck.theme ?? "tech"];
   const selectedText = useMemo(() => {
     if (!slide) return "";
@@ -341,8 +373,17 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
     setExporting(true);
     if (layoutMode === "auto") setOrchestrating(true);
     setMessage(null);
+    setDeck((current) => ({
+      ...current,
+      generationStatus: "building",
+      generationStage: "layout",
+      generationStageIndex: 0,
+      generationProgress: 0,
+      generationMessage: "Preparing the presentation structure",
+      previewUrls: [],
+    }));
     try {
-      const response = await fetch("/api/presentations", {
+      const response = await fetch("/api/presentations?stream=1", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -356,8 +397,48 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
           slides,
         }),
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Export failed.");
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.error || "Export failed.");
+      }
+      if (!response.body) throw new Error("Presentation progress stream was unavailable.");
+
+      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buffer = "";
+      let result: Record<string, any> | undefined;
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += value ?? "";
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const event = JSON.parse(line) as Record<string, any>;
+          if (event.type === "error") throw new Error(event.error);
+          if (event.type === "complete") {
+            result = event.result;
+            continue;
+          }
+          setDeck((current) => {
+            const previewUrls = [...(current.previewUrls ?? [])];
+            if (event.type === "preview" && typeof event.index === "number") {
+              previewUrls[event.index] = event.previewUrl;
+            }
+            return {
+              ...current,
+              slides: event.slides ?? current.slides,
+              generationStage: event.stage,
+              generationStageIndex: event.stageIndex,
+              generationProgress: event.progress,
+              generationMessage: event.message,
+              previewUrls,
+            };
+          });
+          await paintProgressFrame();
+        }
+        if (done) break;
+      }
+      if (!result) throw new Error("Presentation generation ended before completion.");
       setDeck((current) => ({
         ...current,
         generationStatus: "ready",
@@ -371,6 +452,12 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
       setMode("preview");
       setMessage("PowerPoint is up to date.");
     } catch (error) {
+      setDeck((current) => ({
+        ...current,
+        generationStatus: "error",
+        generationError: error instanceof Error ? error.message : "Export failed.",
+        generationMessage: "Generation stopped",
+      }));
       setMessage(error instanceof Error ? error.message : "Export failed.");
     } finally {
       setExporting(false);
@@ -536,8 +623,19 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
                   className="aspect-video w-full bg-white object-contain outline outline-black/10 dark:outline-white/10"
                 />
               ) : (
-                <div className="flex aspect-video items-center justify-center bg-muted px-2 text-center text-[10px] text-muted-foreground">
-                  Draft slide {index + 1}
+                <div className="relative flex aspect-video items-center justify-center overflow-hidden bg-muted px-2 text-center text-[10px] text-muted-foreground">
+                  {deck.generationStatus === "building" ? (
+                    <>
+                      <div className="absolute inset-0 animate-pulse bg-foreground/[0.04] motion-reduce:animate-none" />
+                      <span className="relative">
+                        {index === (deck.previewUrls?.filter(Boolean).length ?? 0)
+                          ? "Rendering"
+                          : "Queued"}
+                      </span>
+                    </>
+                  ) : (
+                    `Draft slide ${index + 1}`
+                  )}
                 </div>
               )}
               <p className="truncate px-2 pt-1.5 text-[11px] text-muted-foreground">
@@ -565,12 +663,14 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
               {exporting
                 ? "Updating PowerPoint"
                 : deck.generationStatus === "building"
-                  ? "Content ready, composing PowerPoint"
+                  ? (deck.generationMessage ?? "Preparing the PowerPoint")
                   : deck.generationStatus === "drafting"
                     ? "Draft has unpublished changes"
-                    : deck.qualityIssues?.length
-                      ? `PowerPoint ready · ${deck.qualityIssues.length} layout warning${deck.qualityIssues.length === 1 ? "" : "s"}`
-                      : "PowerPoint ready"}
+                    : blockingIssues.length
+                      ? `Needs review · ${blockingIssues.length} layout error${blockingIssues.length === 1 ? "" : "s"}`
+                      : deck.qualityIssues?.length
+                        ? `PowerPoint ready · ${deck.qualityIssues.length} quality note${deck.qualityIssues.length === 1 ? "" : "s"}`
+                        : "PowerPoint ready"}
             </span>
           </div>
           <div className="flex gap-1">
@@ -616,11 +716,22 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
             ) : null}
           </div>
         </div>
-        {(exporting || deck.generationStatus === "building") && (
+        {deck.generationStatus === "building" ? (
+          <div className="border-b bg-background px-4 py-3">
+            <JobProgress
+              title={`Building ${deck.title}`}
+              stages={presentationBuildStages}
+              stageIndex={deck.generationStageIndex ?? 0}
+              stageProgress={deck.generationProgress ?? 0}
+              eta={`${deck.previewUrls?.filter(Boolean).length ?? 0}/${slides.length} previews`}
+              className="my-0 max-w-none border-0 bg-transparent p-0 shadow-none"
+            />
+          </div>
+        ) : exporting ? (
           <div className="h-0.5 overflow-hidden bg-muted">
             <div className="h-full w-2/3 animate-pulse bg-primary" />
           </div>
-        )}
+        ) : null}
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-6">
           {mode === "preview" && deck.previewUrls?.[activeSlide] ? (
             <img
@@ -628,6 +739,22 @@ function PresentationEditor({ artifact }: { artifact: Artifact }) {
               alt={`Rendered slide ${activeSlide + 1}`}
               className="aspect-video w-full max-w-5xl bg-white object-contain shadow-[0_18px_60px_rgba(0,0,0,0.18)] outline outline-black/10 dark:outline-white/10"
             />
+          ) : deck.generationStatus === "building" && mode === "preview" ? (
+            <div className="flex w-full max-w-3xl flex-col items-center text-center">
+              <div className="relative aspect-video w-full overflow-hidden bg-muted outline outline-black/10 dark:outline-white/10">
+                <div className="absolute inset-0 animate-pulse bg-foreground/[0.035] motion-reduce:animate-none" />
+                <div className="absolute inset-x-[8%] top-[12%] h-5 rounded-sm bg-foreground/10" />
+                <div className="absolute inset-x-[8%] top-[24%] h-2 rounded-sm bg-foreground/[0.07]" />
+                <div className="absolute inset-x-[8%] bottom-[12%] grid grid-cols-2 gap-6">
+                  <div className="h-28 rounded-sm bg-foreground/[0.06]" />
+                  <div className="h-28 rounded-sm bg-foreground/[0.06]" />
+                </div>
+              </div>
+              <p className="mt-4 text-sm font-medium">{deck.generationMessage}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Completed previews appear here as soon as each slide is rendered.
+              </p>
+            </div>
           ) : (
             <section
               className={`relative aspect-video w-full max-w-5xl overflow-hidden shadow-[0_18px_60px_rgba(0,0,0,0.18)] outline outline-black/10 dark:outline-white/10 ${theme.canvas}`}

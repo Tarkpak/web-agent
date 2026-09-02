@@ -167,4 +167,79 @@
     @apply bg-background text-foreground;
     font-optical-sizing: auto;
   }
+
+  button,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :focus-visible {
+    outline: none;
+  }
+
+  * {
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 22%, transparent) transparent;
+    scrollbar-width: thin;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    min-height: 40px;
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-color: color-mix(in oklab, var(--muted-foreground) 22%, transparent);
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--muted-foreground) 38%, transparent);
+  }
+
+  *::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(in oklab, var(--foreground) 42%, transparent);
+  }
+}
+
+@layer components {
+  .aui-md {
+    text-wrap: pretty;
+  }
+
+  .aui-md > :first-child {
+    margin-top: 0;
+  }
+
+  .aui-md > :last-child {
+    margin-bottom: 0;
+  }
+
+  [data-slot="aui_chain-of-thought"] {
+    margin-block: 0.25rem 0.75rem;
+  }
+
+  [data-slot="reasoning-root"] {
+    margin-bottom: 0.25rem;
+  }
+
+  [data-slot="reasoning-trigger"],
+  [data-slot="tool-group-trigger"] {
+    min-height: 2rem;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }

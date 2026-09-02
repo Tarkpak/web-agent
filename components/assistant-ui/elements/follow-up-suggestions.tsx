@@ -8,7 +8,7 @@ function SuggestionsRow() {
   return (
     <div
       data-slot="follow-up-suggestions"
-      className="flex w-full gap-2 overflow-x-auto pb-1 [scrollbar-width:none]"
+      className="no-scrollbar flex w-full gap-2 overflow-x-auto pb-1"
     >
       {suggestions.map((suggestion, index) => (
         <ThreadPrimitive.Suggestion

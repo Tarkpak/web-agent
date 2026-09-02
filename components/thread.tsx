@@ -155,9 +155,9 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({ isEmpty, aut
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root bg-background @container flex h-full flex-col"
       style={{
-        ["--thread-max-width" as string]: "44rem",
+        ["--thread-max-width" as string]: "48rem",
         ["--composer-bg" as string]: "var(--color-card)",
-        ["--composer-radius" as string]: "1.5rem",
+        ["--composer-radius" as string]: "1rem",
         ["--composer-padding" as string]: "8px",
       }}
     >
@@ -169,7 +169,7 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({ isEmpty, aut
       >
         <div
           className={cn(
-            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
+            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-6 md:px-6 md:pt-8",
             isEmpty && "justify-center",
           )}
         >
@@ -181,14 +181,15 @@ const ThreadRoot: FC<{ isEmpty: boolean; autoFocus: boolean }> = ({ isEmpty, aut
           </AuiIf>
           <ConnectionState className="mb-4" />
 
-          <div data-slot="aui_message-group" className="mb-14 flex flex-col gap-y-6 empty:hidden">
+          <div data-slot="aui_message-group" className="mb-10 flex flex-col gap-y-5 empty:hidden">
             <ThreadPrimitive.Messages>{() => <ThreadMessage />}</ThreadPrimitive.Messages>
           </div>
 
           <ThreadPrimitive.ViewportFooter
             className={cn(
               "aui-thread-viewport-footer bg-background flex flex-col gap-4 overflow-visible pb-4 md:pb-6",
-              !isEmpty && "sticky bottom-0 mt-auto rounded-t-(--composer-radius)",
+              !isEmpty &&
+                "sticky bottom-0 z-20 mt-auto rounded-t-(--composer-radius) pt-3 before:pointer-events-none before:absolute before:inset-x-0 before:-top-10 before:h-10 before:bg-linear-to-b before:from-transparent before:to-background",
             )}
           >
             <ScrollToBottom />
@@ -226,7 +227,7 @@ const ThreadWelcome: FC = () => {
 
 const ThreadSuggestions: FC = () => {
   return (
-    <div className="aui-thread-welcome-suggestions flex w-full flex-wrap items-center justify-center gap-2 px-4">
+    <div className="aui-thread-welcome-suggestions grid w-full grid-cols-1 gap-2 px-1 sm:grid-cols-2">
       <ThreadPrimitive.Suggestions>{() => <ThreadSuggestionItem />}</ThreadPrimitive.Suggestions>
     </div>
   );
@@ -239,8 +240,8 @@ const ThreadSuggestionItem: FC = () => {
         send
         render={
           <Button
-            variant="ghost"
-            className="aui-thread-welcome-suggestion text-foreground hover:bg-muted border-border/60 h-auto gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-colors"
+            variant="outline"
+            className="aui-thread-welcome-suggestion hover:bg-muted/70 h-auto min-h-10 justify-start gap-1.5 rounded-lg border-border/70 px-3 py-2 text-left text-sm font-normal whitespace-normal shadow-none transition-[background-color,border-color,transform] active:translate-y-px"
           />
         }
       >
@@ -276,11 +277,11 @@ const AssistantMessage: FC = () => {
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
-      className="fade-in slide-in-from-bottom-1 animate-in relative -mb-7.5 pb-7.5 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
+      className="fade-in slide-in-from-bottom-1 animate-in relative -mb-7 pb-7 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
     >
       <div
         data-slot="aui_assistant-message-content"
-        className="text-foreground px-2 leading-relaxed wrap-break-word"
+        className="text-foreground px-1 leading-7 wrap-break-word md:px-2"
       >
         <MessagePrimitive.GroupedParts groupBy={messageGroupBy} indicator="empty">
           {({ part, children }) => {
@@ -363,13 +364,13 @@ const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
-      className="fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 px-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto] [&:where(>*)]:col-start-2"
+      className="fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto grid-cols-[minmax(48px,1fr)_minmax(0,85%)] content-start gap-y-2 px-1 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto] [&:where(>*)]:col-start-2 md:grid-cols-[minmax(72px,1fr)_minmax(0,78%)] md:px-2"
       data-role="user"
     >
       <UserMessageAttachments />
 
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
-        <div className="aui-user-message-content peer bg-muted text-foreground rounded-xl px-4 py-2 wrap-break-word empty:hidden">
+        <div className="aui-user-message-content peer bg-muted text-foreground rounded-xl px-4 py-2.5 leading-6 wrap-break-word empty:hidden">
           <MessageQuote />
           <MessagePrimitive.Parts>
             {({ part }) => {

@@ -108,6 +108,14 @@ export type PresentationDesign = {
   name: string;
   mood: string;
   rationale: string;
+  narrativeMode?: "pyramid" | "narrative" | "instructional" | "showcase" | "briefing" | "custom";
+  narrativeBehavior?: string;
+  visualStyle?: string;
+  visualBehavior?: string;
+  imageStrategy?: "none" | "photography" | "illustration" | "mixed" | "data-led";
+  compositionRule?: string;
+  typographyRule?: string;
+  recurringMotif?: string;
   background: string;
   foreground: string;
   muted: string;
@@ -165,6 +173,10 @@ export type Artifact = {
   masterProfile?: PresentationMasterProfile;
   generationStatus?: "drafting" | "building" | "ready" | "error";
   generationError?: string;
+  generationStage?: "layout" | "preview" | "export" | "verify";
+  generationStageIndex?: number;
+  generationProgress?: number;
+  generationMessage?: string;
   previewUrls?: string[];
   qualityIssues?: PresentationQualityIssue[];
   narrativeQuality?: PresentationNarrativeQuality;

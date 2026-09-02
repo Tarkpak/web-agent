@@ -5,7 +5,6 @@ import { ApprovalCard } from "@/components/assistant-ui/elements/approval-card";
 import { ArtifactCard } from "@/components/assistant-ui/elements/artifact-card";
 import { FileCard } from "@/components/assistant-ui/elements/file-card";
 import { buildFileTree, FileTree } from "@/components/assistant-ui/elements/file-tree";
-import { JobProgress, type JobStage } from "@/components/assistant-ui/elements/job-progress";
 import { TerminalBlock } from "@/components/assistant-ui/elements/terminal-block";
 import { ToolError } from "@/components/assistant-ui/elements/tool-error";
 import { WebSearch, type WebSearchResult } from "@/components/assistant-ui/elements/web-search";
@@ -85,7 +84,20 @@ export default defineToolkit({
     }),
     execute: externalTool(),
     render: ({ args, result, status }) => {
-      const query = args.query ?? "the web";
+      const record =
+        result && typeof result === "object" ? (result as Record<string, unknown>) : {};
+      const action =
+        record.action && typeof record.action === "object"
+          ? (record.action as Record<string, unknown>)
+          : {};
+      const actionQueries = Array.isArray(action.queries)
+        ? action.queries.filter((query): query is string => typeof query === "string")
+        : [];
+      const query =
+        args.query ??
+        (actionQueries.length > 0 ? actionQueries.join(", ") : undefined) ??
+        (typeof action.query === "string" ? action.query : undefined) ??
+        "the web";
       if (status.type === "incomplete" && status.reason === "error") {
         return (
           <ToolError
@@ -95,8 +107,6 @@ export default defineToolkit({
           />
         );
       }
-      const record =
-        result && typeof result === "object" ? (result as Record<string, unknown>) : {};
       const raw = Array.isArray(record.results)
         ? record.results
         : Array.isArray(record.sources)
@@ -303,7 +313,7 @@ export default defineToolkit({
   },
   choose_presentation_style: {
     description:
-      "Pause before creating a new presentation and let the user choose one of three AI-generated visual directions. Each direction must be tailored to this specific topic, audience, and purpose, and materially differ in palette, typography, composition, and density. Use this exactly once before create_presentation unless the user already supplied a clear visual direction or asked you to choose for them.",
+      "Confirm a presentation design system before creation. Generate 2 to 4 project-specific whole directions based on genuine ambiguity, not a fixed set of presets. Each direction must independently define how the deck argues (narrative mode) and how it looks (visual style), plus executable typography, composition, imagery, motif, density, and palette behavior. Directions must differ in communication strategy, not merely colors. Preserve a custom escape hatch. Use exactly once before create_presentation unless the user supplied a clear direction or asked you to decide.",
     parameters: z.object({
       designRead: z
         .string()
@@ -319,6 +329,34 @@ export default defineToolkit({
               .describe("Short evocative direction name, not a generic template label"),
             mood: z.string().describe("Three or four plain-language mood words"),
             rationale: z.string().describe("Why this direction fits the user's topic and audience"),
+            narrativeMode: z
+              .enum(["pyramid", "narrative", "instructional", "showcase", "briefing", "custom"])
+              .describe("How the argument advances across the deck; custom is allowed"),
+            narrativeBehavior: z
+              .string()
+              .describe("Project-specific page-to-page argument and pacing behavior"),
+            visualStyle: z
+              .string()
+              .describe(
+                "A project-fit visual language such as editorial, data-journalism, swiss-minimal, paper-cut, blueprint, or a novel custom style; this is reference vocabulary, not a whitelist",
+              ),
+            visualBehavior: z
+              .string()
+              .describe(
+                "Shape language, whitespace rhythm, texture, elevation, and decoration behavior",
+              ),
+            imageStrategy: z
+              .enum(["none", "photography", "illustration", "mixed", "data-led"])
+              .describe("The deck-wide role of images and data visuals"),
+            compositionRule: z
+              .string()
+              .describe("Deck-wide hierarchy and composition tendency without fixed coordinates"),
+            typographyRule: z
+              .string()
+              .describe("Title/body character, hierarchy, contrast, and editable font behavior"),
+            recurringMotif: z
+              .string()
+              .describe("One subject-derived cross-page motif that varies by page role"),
             background: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
             foreground: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
             muted: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
@@ -330,7 +368,8 @@ export default defineToolkit({
             recommended: z.boolean().optional(),
           }),
         )
-        .length(3),
+        .min(2)
+        .max(4),
     }),
     execute: humanTool(),
     render: ({ args, result, addResult }) => {
@@ -341,28 +380,40 @@ export default defineToolkit({
           : null;
       if (selected) {
         const option = options.find((item) => item.id === selected);
+        const customDirection =
+          selected === "custom" &&
+          result &&
+          typeof result === "object" &&
+          "customDirection" in result
+            ? String((result as { customDirection: string }).customDirection)
+            : null;
         return (
           <ToolCard
             title="Visual direction"
-            body={`Selected ${option?.name ?? selected}`}
+            body={
+              customDirection
+                ? `Custom: ${customDirection}`
+                : `Selected ${option?.name ?? selected}`
+            }
             tone="ok"
           />
         );
       }
-      if (options.length < 3) {
+      if (options.length < 2) {
         return (
           <ToolCard
             title="Visual direction"
-            body="Analyzing the brief and composing three tailored directions"
+            body="Analyzing the brief and composing distinct design systems"
             tone="wait"
           />
         );
       }
       return (
         <RecommendationChoices
-          detail={args.designRead || "Three directions tailored to this presentation"}
+          detail={args.designRead || "Design systems tailored to this presentation"}
           options={options as VisualDirection[]}
           onSelect={(option) => addResult({ selected: option.id, design: option })}
+          onCustom={(customDirection) => addResult({ selected: "custom", customDirection })}
         />
       );
     },
@@ -390,6 +441,18 @@ export default defineToolkit({
           typography: z.enum(["modern", "editorial", "technical", "friendly"]),
           composition: z.enum(["bold", "editorial", "structured", "cinematic"]),
           density: z.enum(["airy", "balanced", "dense"]),
+          narrativeMode: z
+            .enum(["pyramid", "narrative", "instructional", "showcase", "briefing", "custom"])
+            .optional(),
+          narrativeBehavior: z.string().optional(),
+          visualStyle: z.string().optional(),
+          visualBehavior: z.string().optional(),
+          imageStrategy: z
+            .enum(["none", "photography", "illustration", "mixed", "data-led"])
+            .optional(),
+          compositionRule: z.string().optional(),
+          typographyRule: z.string().optional(),
+          recurringMotif: z.string().optional(),
         })
         .optional()
         .describe("The exact visual direction selected by the user"),
@@ -431,8 +494,11 @@ export default defineToolkit({
             body: z.string().optional().describe("Short paragraph, preferably under 60 words"),
             bullets: z
               .array(z.string())
+              .max(30)
               .optional()
-              .describe("Up to five concise audience-facing bullet points"),
+              .describe(
+                "Concise audience-facing points. Prefer five or fewer per slide; dense input is automatically split into continuation slides.",
+              ),
             layout: z
               .enum([
                 "cover",
@@ -481,7 +547,9 @@ export default defineToolkit({
                 rows: z.array(z.array(z.string()).max(6)).max(8),
               })
               .optional()
-              .describe("Traceable tabular data supplied by the user"),
+              .describe(
+                "Genuine traceable tabular data supplied by the user or research. Never use placeholder, sample, TBD, empty, or invented cells to obtain a table layout.",
+              ),
           }),
         )
         .min(1)
@@ -493,21 +561,13 @@ export default defineToolkit({
       const file = result as
         | { fileName?: string; downloadUrl?: string; slideCount?: number; error?: string }
         | undefined;
-      const stages: readonly JobStage[] = [
-        { name: "compose", weight: 2 },
-        { name: "layout", weight: 3 },
-        { name: "render", weight: 3 },
-        { name: "export", weight: 2 },
-      ];
-
       if (status.type === "running") {
         return (
-          <JobProgress
-            title={`Building ${args.title ?? "presentation"}`}
-            stages={stages}
-            stageIndex={0}
-            stageProgress={0}
-            eta={`${args.slides?.length ?? 0} slides`}
+          <ArtifactCard
+            title={args.title ?? "Presentation"}
+            meta={`${args.slides?.length ?? 0} slides · Building in canvas`}
+            kind="presentation"
+            generating
           />
         );
       }

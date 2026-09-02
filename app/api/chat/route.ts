@@ -39,7 +39,8 @@ Use generate_image to create a new image from a prompt.
 Use edit_image to change or restyle images the user attached.
 Use present_artifact to show HTML pages, markdown docs, or code in the canvas.
 Use list_files to inspect the restricted task workspace, read_file to open an existing task file, and write_file to create or update UTF-8 text files. All task file paths must be relative. Use write_file whenever the user asks you to create a downloadable text, code, markdown, JSON, CSV, SVG, or HTML file.
-For every new PPT, PowerPoint, slide deck, or presentation: first infer the audience, communication job, desired outcome, central takeaway, and subject-specific visual language. Build a cumulative narrative in which each slide has one job and one primary claim; open deliberately and close with a conclusion, decision, implication, or action rather than a generic thank-you page. Unless the user already gave a clear visual direction or explicitly asked you to choose, call choose_presentation_style exactly once with three materially different, bespoke visual directions. Do not reuse generic preset names or palettes. Make the first option your recommended fit. After the user selects, call create_presentation using the exact selected design object. You may suggest a layout for every slide, but the presentation orchestrator will validate semantic fit, capacity, adjacent pacing, and split dense pages before export. Use chart or table only when the user supplied traceable data. Include brand settings only when the user explicitly supplied them. Never invent budgets, metrics, dates, quotes, research findings, or other factual specifics; preserve user-provided facts and use concise bracketed placeholders such as [试点预算] when required information is missing. Create the requested number of complete slides and let the tool open the editor and write the real .pptx file. After the tool completes, say that the deck is open in the editor; do not invent or repeat a markdown download link because the editor owns preview, editing, and download controls.
+For every new PPT, PowerPoint, slide deck, or presentation: first infer the audience, communication job, desired outcome, central takeaway, delivery context, expected afterlife, and subject-specific visual language. Separate narrative mode (how the deck argues) from visual style (how it looks). Build a cumulative narrative in which each slide has one audience move, one job, and one primary claim; open deliberately and close with a conclusion, decision, implication, or action rather than a generic thank-you page. Unless the user already gave a clear design direction or explicitly asked you to choose, call choose_presentation_style exactly once with 2 to 4 genuinely distinct whole design systems; choose the count based on meaningful ambiguity, never default mechanically to three. Each option must define narrative behavior, visual behavior, imagery strategy, typography, composition, a subject-derived recurring motif, density, and semantic palette roles. A visual style is generative vocabulary rather than a template whitelist: novel custom directions are allowed. Do not reuse a stock trio, generic preset names, or palette-only variants. Recommend the strongest fit, but vary its position rather than always placing it first. If the user submits a custom direction, interpret it into a complete design object before create_presentation. After selection, call create_presentation using the complete selected design object. You may suggest a layout for every slide, but the presentation orchestrator will validate semantic fit, capacity, adjacent pacing, and split dense pages before export. Use chart or table only when the user supplied traceable data. Include brand settings only when the user explicitly supplied them. Never invent budgets, metrics, dates, quotes, research findings, or other factual specifics; preserve user-provided facts and use concise bracketed placeholders such as [试点预算] when required information is missing. Create the requested number of complete slides and let the tool open the editor and write the real .pptx file. After the tool completes, say that the deck is open in the editor; do not invent or repeat a markdown download link because the editor owns preview, editing, and download controls.
+For presentations, every non-cover slide must contain audience-facing body text, concise bullets, or genuine traceable data. A title and subtitle alone are incomplete. Never create placeholder, sample, demo, TBD, zero-filled, empty, or invented chart/table data to obtain a layout. Never expose design instructions, motif descriptions, planning notes, or internal production language as visible slide content or footers.
 Use confirm_plan before multi-step or destructive work the user did not already approve.
 Use get_current_time when the user asks about the date or time.
 Prefer tools over guessing. Keep answers tight.`;
@@ -52,7 +53,9 @@ Use code_execution for calculations, parsing, and small programs.
 Cite sources when you searched.`;
   }
 
-  return shared;
+  return `${shared}
+Use web_search for current events and live facts when it is available.
+Cite sources when you searched.`;
 }
 
 function imageMessageResponse(
@@ -271,17 +274,25 @@ export async function POST(req: Request) {
     baseURL: auth.baseURL || undefined,
   });
   const allTools = {
+    ...(capabilities?.webSearch === false
+      ? {}
+      : { web_search: openai.tools.webSearch({ searchContextSize: "medium" }) }),
     ...enabledImageTools,
     ...appTools,
   };
 
   const result = streamText({
-    model: openai.chat(modelId || "gpt-4.1"),
+    model: openai.responses(modelId || "gpt-4.1"),
     messages: await convertToModelMessages(injectQuoteContext(messages), { tools: allTools }),
     system: [systemPrompt("openai"), system].filter(Boolean).join("\n\n"),
     stopWhen: stepCountIs(12),
     temperature: reasoningEffort ? undefined : temperature,
-    providerOptions: reasoningEffort ? { openai: { reasoningEffort } } : undefined,
+    providerOptions: {
+      openai: {
+        store: false,
+        ...(reasoningEffort ? { reasoningEffort } : {}),
+      },
+    },
     tools: allTools,
   });
 

@@ -31,7 +31,7 @@ export function Composer({ autoFocus }: { autoFocus: boolean }) {
         render={
           <div
             data-slot="aui_composer-shell"
-            className="border-border/60 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) transition-[border-color] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
+            className="border-border/80 data-[dragging=true]:border-ring focus-within:border-foreground/25 focus-within:shadow-[0_8px_30px_oklch(0_0_0/0.06)] dark:border-muted-foreground/20 dark:focus-within:border-muted-foreground/40 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) shadow-[0_1px_2px_oklch(0_0_0/0.04)] transition-[border-color,box-shadow] duration-200 data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
           />
         }
       >
@@ -43,7 +43,7 @@ export function Composer({ autoFocus }: { autoFocus: boolean }) {
               placeholder={
                 imageMode ? "Describe the image to generate or edit..." : "Ask the agent..."
               }
-              className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 outline-none"
+              className="aui-composer-input caret-primary placeholder:text-muted-foreground/60 max-h-48 min-h-11 w-full resize-none bg-transparent px-2.5 py-1.5 text-base leading-6 outline-none"
               rows={1}
               autoFocus={autoFocus}
               enterKeyHint="send"
